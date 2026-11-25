@@ -2,7 +2,9 @@ name: CI
 
 # Lean CI: one run per PR head, newest push wins. Runner comes from the org/repo
 # variable CI_RUNNER (self-hosted label) and falls back to GitHub-hosted.
-# PRs from forks always use GitHub-hosted runners.
+# PRs from forks always use GitHub-hosted runners. Public repos use them too
+# (free there, and the self-hosted runner group serves private repos only),
+# unless the variable CI_RUNNER_PUBLIC is 'true'.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -23,7 +25,7 @@ concurrency:
 jobs:
   check:
     if: ${{ !github.event.pull_request.draft }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event.repository.private || vars.CI_RUNNER_PUBLIC == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
