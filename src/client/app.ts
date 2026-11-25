@@ -42,7 +42,14 @@ async function busy<T>(btn: HTMLButtonElement | null, fn: () => Promise<T>): Pro
 const passkeysSupported = () => typeof window.PublicKeyCredential === "function";
 const next = () => {
   const n = new URLSearchParams(location.search).get("next") || "/account";
-  return n.startsWith("/") && !n.startsWith("//") && !n.includes("\\") ? n : "/account";
+  // Same rules as safeNext on the server. Control characters matter: the URL parser drops tabs and
+  // newlines, so "/\t/evil.example" would turn into "//evil.example".
+  if (n.length > 512 || !n.startsWith("/") || n.startsWith("//") || n.includes("\\") || /[\u0000-\u001f]/.test(n)) return "/account";
+  try {
+    return new URL(n, location.origin).origin === location.origin ? n : "/account";
+  } catch {
+    return "/account";
+  }
 };
 
 /** After signing in: an OAuth flow answers with { redirect, url }; otherwise go to `next`. */

@@ -9,6 +9,8 @@ export const SEND_INTERVAL_MS = 60_000;
 export const SENDS_PER_DAY = 10;
 /** Wrong or right, verification attempts per address per day across all its codes. */
 export const VERIFY_PER_DAY = 15;
+/** How long a code lives (matches emailOTP's expiresIn). Only attempts while a code may be pending count. */
+export const CODE_LIFETIME_MS = 600_000;
 const DAY_MS = 24 * 3600 * 1000;
 
 const SEND_PATH = "/email-otp/send-verification-otp";
@@ -62,7 +64,9 @@ export const emailLimits = () =>
               if (row.lastSend && now - new Date(row.lastSend).getTime() < SEND_INTERVAL_MS) throw tooMany("We just sent a code. Wait a minute before asking for another.");
               if (row.sends >= SENDS_PER_DAY) throw tooMany("That's a lot of codes for one day. Try again tomorrow.");
               await db.update({ model: "emailLimit", where: [{ field: "id", value: row.id }], update: { sends: row.sends + 1, lastSend: new Date(now) } });
-            } else {
+            } else if (row.lastSend && now - new Date(row.lastSend).getTime() <= CODE_LIFETIME_MS) {
+              // Guesses with no code out can't succeed, so they don't count. Otherwise anyone could lock an
+              // address out for a day with a few requests, without ever passing the bot check on sending.
               await db.update({ model: "emailLimit", where: [{ field: "id", value: row.id }], update: { verifies: row.verifies + 1 } });
             }
           }),
