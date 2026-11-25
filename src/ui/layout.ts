@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // stem's pages follow the shiftbloom studio brand book v2: paper and ink, one loud flower.
+// Paper is a soft warm off-white rather than pure white, which is easier on bright screens.
 // Bloom Red for actions and seeds, gradients only inside the mark. Clash Display for statements,
 // General Sans for UI and body, JetBrains Mono for labels and codes.
 import { bloomSvg } from "../bloom";
@@ -9,7 +10,7 @@ import { esc } from "./html";
 export const SOURCE_URL = "https://github.com/shiftbloom-studio/stem";
 
 const css = `
-:root{--bloom:#FF2E52;--root:#C81040;--petal:#FF8FAB;--blush:#FFE9EF;--ink:#1A1216;--ink60:rgba(26,18,22,.66);--ink40:rgba(26,18,22,.42);--line:#ece4e6;--paper:#fff;--warm:#FAF6F4;
+:root{--bloom:#FF2E52;--root:#C81040;--petal:#FF8FAB;--blush:#FFE9EF;--ink:#1A1216;--ink60:rgba(26,18,22,.66);--ink40:rgba(26,18,22,.42);--line:#E4DADB;--paper:#F6F1EE;--warm:#EEE6E2;--field:#FBF8F6;
 --display:"Clash Display",ui-sans-serif,system-ui,sans-serif;--sans:"General Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
 --ease:cubic-bezier(.22,1.1,.36,1);--settle:cubic-bezier(.4,0,.2,1)}
 *{box-sizing:border-box}[hidden]{display:none!important}html{-webkit-text-size-adjust:100%}
@@ -33,7 +34,7 @@ h1{font-size:clamp(34px,5vw,56px)}h2{font-size:22px;line-height:1.15}
 .btn.sm{padding:9px 14px;font-size:13px}.btn.wide{width:100%}
 .linkbtn{appearance:none;border:0;background:none;padding:0;font:inherit;color:var(--root);cursor:pointer}.linkbtn:hover{text-decoration:underline}
 .btn:focus-visible,a:focus-visible,button:focus-visible{outline:2px solid var(--root);outline-offset:2px}
-input{font:16px/1.5 var(--sans);color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;transition:border-color .24s var(--settle),box-shadow .24s var(--settle)}
+input{font:16px/1.5 var(--sans);color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;transition:border-color .24s var(--settle),box-shadow .24s var(--settle)}
 input:focus{outline:0;border-color:var(--bloom);box-shadow:0 0 0 3px var(--blush)}
 input.code{font:500 26px/1.2 var(--mono);letter-spacing:.32em;text-align:center}
 label.f{display:grid;gap:6px;font:500 14px/1.3 var(--sans)}
@@ -88,7 +89,7 @@ export function page(o: PageOpts, body: string, right = "") {
   const data = Object.entries(o.data || {}).map(([k, v]) => ` data-${k}="${esc(v)}"`).join("");
   return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(o.title)}</title>${o.index ? "" : `<meta name="robots" content="noindex, nofollow">`}${o.description ? `<meta name="description" content="${esc(o.description)}">` : ""}${o.canonical ? `<link rel="canonical" href="${esc(o.canonical)}">` : ""}
-<meta name="theme-color" content="#ffffff"><meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="theme-color" content="#F6F1EE"><meta name="referrer" content="strict-origin-when-cross-origin">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/fonts.css"><style>${css}</style>
 ${o.page ? `<script src="/assets/app.js" defer></script>` : ""}${o.turnstile ? `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>` : ""}
 </head><body${o.page ? ` data-page="${esc(o.page)}"` : ""}${data}><div class="wrap">${topbar(right)}<main>${body}</main>${footer(lang, !!o.legal)}</div></body></html>`;
