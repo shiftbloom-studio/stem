@@ -170,6 +170,9 @@ export function createAuth(env: Env, exec?: Exec) {
         accessTokenExpiresIn: ACCESS_TOKEN_TTL,
         m2mAccessTokenExpiresIn: 300,
         refreshTokenExpiresIn: 60 * 60 * 24 * 30,
+        // Two tabs of an app may refresh with the same token at once: inside this window the second
+        // request gets the same new pair instead of revoking the whole token family.
+        refreshTokenReuseInterval: 60,
         storeClientSecret: "hashed",
         allowDynamicClientRegistration: false,
         // Only the operator registers clients; signed-in users can't.
