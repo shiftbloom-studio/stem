@@ -155,6 +155,16 @@ describe("stem", () => {
     expect((await new Browser(env, "198.51.100.99").json("/api/auth/sign-in/email-otp", { email, otp: code })).status).toBe(429);
   });
 
+  it("doesn't count guesses when no code was sent", async () => {
+    const email = "nocode@example.com";
+    for (let i = 0; i < 20; i++) {
+      const r = await new Browser(env, `198.51.101.${10 + i}`).json("/api/auth/sign-in/email-otp", { email, otp: String(200000 + i) });
+      expect(r.status).not.toBe(429);
+    }
+    const send = await new Browser(env, "198.51.101.99").json("/api/auth/email-otp/send-verification-otp", { email, type: "sign-in" });
+    expect(send.status).toBe(200);
+  });
+
   it("keeps organizations in the app's hands", async () => {
     for (const path of ["update", "delete", "invite-member", "update-member-role", "remove-member", "create", "set-active", "leave"]) {
       const r = await browser.json(`/api/auth/organization/${path}`, { organizationId: orgId, data: { slug: "renamed" } });

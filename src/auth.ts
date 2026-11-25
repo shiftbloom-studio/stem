@@ -2,7 +2,7 @@
 // The Better Auth instance behind stem. One instance per isolate and environment.
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware, APIError } from "better-auth/api";
-import { emailLimits } from "./limits";
+import { emailLimits, CODE_LIFETIME_MS } from "./limits";
 import { emailOTP, organization, jwt, captcha } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -121,7 +121,7 @@ export function createAuth(env: Env, exec?: Exec) {
       emailLimits(),
       emailOTP({
         otpLength: 6,
-        expiresIn: 600,
+        expiresIn: CODE_LIFETIME_MS / 1000,
         allowedAttempts: 5,
         storeOTP: "hashed",
         sendVerificationOnSignUp: false,
