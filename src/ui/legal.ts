@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Imprint and privacy policy, in English and German. Operator details come from the LEGAL variable.
+import type { Legal } from "../util";
+import { esc } from "./html";
+import { page } from "./layout";
+
+export type LegalKind = "privacy" | "datenschutz" | "imprint" | "impressum";
+export const LEGAL_PATHS: Record<string, LegalKind> = { "/privacy": "privacy", "/datenschutz": "datenschutz", "/imprint": "imprint", "/impressum": "impressum" };
+const UPDATED = { en: "Last updated: 25 November 2026", de: "Stand: 25. November 2026" };
+
+export function legalPage(kind: LegalKind, l: Legal, o: { turnstile: boolean }) {
+  const de = kind === "datenschutz" || kind === "impressum";
+  const lang = de ? "de" : "en";
+  const isPrivacy = kind === "privacy" || kind === "datenschutz";
+  const title = { privacy: "Privacy policy", datenschutz: "Datenschutzerklärung", imprint: "Imprint", impressum: "Impressum" }[kind];
+  const other = { privacy: "/datenschutz", datenschutz: "/privacy", imprint: "/impressum", impressum: "/imprint" }[kind];
+  const mail = `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a>`;
+  const address = `<address>${esc(l.name)}<br>${l.business ? `${esc(l.business)}<br>` : ""}${esc(l.street)}<br>${esc(l.city)}<br>${esc(l.country[lang])}</address>`;
+  const body = isPrivacy ? (de ? privacyDe(address, mail, l, o) : privacyEn(address, mail, l, o)) : imprint(de, address, mail, l);
+  return page(
+    { title: `${title} · stem.`, lang, legal: true },
+    `<div class="legal"><span class="label">${de ? "stem. Rechtliches" : "stem. legal"}</span><h1 style="margin-top:12px">${title}</h1>
+<div class="meta">${isPrivacy ? `<span>${UPDATED[lang]}</span>` : ""}<a href="${other}" hreflang="${de ? "en" : "de"}">${de ? "English" : "Deutsch"}</a></div>
+${body}</div>`,
+  );
+}
+
+function imprint(de: boolean, address: string, mail: string, l: Legal) {
+  const phone = l.phone ? `<br>${de ? "Telefon" : "Phone"}: <a href="tel:${esc(l.phone.replace(/[^\d+]/g, ""))}">${esc(l.phone)}</a>` : "";
+  const vat = l.vatId ? `<p>${de ? "Umsatzsteuer-Identifikationsnummer gemäß § 27a UStG" : "VAT ID pursuant to § 27a UStG"}: ${esc(l.vatId)}</p>` : "";
+  return de
+    ? `<p>Angaben gemäß § 5 DDG:</p>${address}<p>E-Mail: ${mail}${phone}</p>${vat}
+<h2>Verbraucherstreitbeilegung</h2><p>Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.</p>`
+    : `<p>Information pursuant to § 5 DDG:</p>${address}<p>Email: ${mail}${phone}</p>${vat}
+<h2>Consumer dispute resolution</h2><p>We are not willing or obliged to take part in dispute resolution proceedings before a consumer arbitration board.</p>`;
+}
+
+function privacyEn(address: string, mail: string, l: Legal, o: { turnstile: boolean }) {
+  return `<p>stem is the sign-in service for shiftbloom studio apps. You create an account here once and then use it to sign in to those apps. This policy explains what we store for that, who gets to see it, and when it's deleted. There is no tracking or advertising, no analysis of your behavior and no automated decision-making about you.</p>
+<h2>Controller</h2>${address}<p>Email: ${mail}</p>
+<h2>Hosting</h2>
+<p>Cloudflare, Inc., 101 Townsend St., San Francisco, CA 94107, USA, runs stem on our behalf: the pages, the database (Cloudflare D1) and the program behind them (a Cloudflare Worker). To show you a page, Cloudflare processes your IP address, the address of the page, the time, and details your browser sends, such as its user agent. Requests the Worker handles are also logged, including the IP address and the approximate location Cloudflare derives from it. We use these logs only to fix errors and to stop abuse, and they are deleted after at most 7 days.</p>
+<p>Fonts are fetched by our Worker and delivered from stem itself, so your browser doesn't contact Fontshare or jsDelivr.</p>
+<p>The legal basis is our legitimate interest in running stem securely and reliably (Art. 6(1)(f) GDPR). Cloudflare processes the data as our processor under a data processing agreement (Art. 28 GDPR). Cloudflare, Inc. is certified under the EU-U.S. Data Privacy Framework, for which the European Commission has adopted an adequacy decision (Art. 45 GDPR); the agreement also contains the EU standard contractual clauses. More in <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's privacy policy</a>.</p>
+<h2>Your account</h2>
+<p>Your account consists of your email address, the name you give us, whether your address is confirmed, a random user id, and when the account was created and last changed. We need it to sign you in and to tell apps who you are (Art. 6(1)(b) GDPR).</p>
+<p><strong>Codes by email.</strong> When you ask for a sign-in code, we send it to your address and keep only a checksum of it for 10 minutes. The email is sent through Cloudflare Email Service, which processes your address and the message as our processor.</p>
+<p><strong>Passkeys.</strong> For each passkey we store its public key, its id, a name, whether it is synced between devices, which kind of authenticator created it (for example a password manager) and when it was added. The private key never leaves your device, and we never see your fingerprint, face or PIN.</p>
+<p><strong>Sessions.</strong> While you're signed in, we store a session with its creation and expiry time, your IP address and your browser's user agent, so you can see where you're signed in and end sessions you don't recognize. A session ends when you sign out, after 30 days without use, or when you end it from your account page.</p>
+<h2>Apps you sign in to</h2>
+<p>When you sign in to an app with stem, the app learns your user id and, if it asks and you agree (or it is one of our own apps), your name, your email address and which of its teams you're in with your role. We store that you allowed it and the tokens the app uses to keep you signed in, as checksums, for up to 30 days after their last use. Each app is responsible for what it does with this data; its own privacy policy tells you more. The legal basis is the sign-in you ask for (Art. 6(1)(b) GDPR).</p>
+<h2>Teams and invitations</h2>
+<p>Apps can group accounts into teams (organizations). For each team we store its name, which accounts are in it and their roles. When someone invites you, we store your email address, the role, who invited you and the invitation's status, and send you one email with the link. If you don't have an account yet, an unconfirmed one may be created for your address so the invitation can find you; it stays unconfirmed until you sign in. Invitations expire after the time the team sets, at most 30 days. The legal basis is the interest of the team and of you in working together in the app (Art. 6(1)(f) GDPR).</p>
+<h2>Protection against abuse</h2>
+<p>To stop people guessing codes or flooding inboxes, stem counts requests per IP address and endpoint for a few minutes, in its database and in Cloudflare's rate limiter, and refuses requests above a limit. The counts are overwritten as time passes.${o.turnstile ? ` Asking for a code is also protected by Cloudflare Turnstile, which checks whether a person or a program is filling in the form. For this, your browser loads a script from challenges.cloudflare.com and Cloudflare processes technical data about your browser and device. More in <a href="https://www.cloudflare.com/turnstile-privacy-policy/">Cloudflare's Turnstile privacy addendum</a>.` : ""} The legal basis is our legitimate interest in keeping accounts safe (Art. 6(1)(f) GDPR).</p>
+<h2>Cookies</h2>
+<p>stem sets a session cookie when you sign in, and short-lived cookies that hold the state of a sign-in that is still in progress. They are only sent to stem itself, never to the apps, and they're strictly necessary for signing in (§ 25(2) no. 2 TDDDG).${o.turnstile ? " Turnstile may also store data in your browser for the check you start." : ""} The sign-in page remembers in your browser's local storage if you said "Not now" to adding a passkey.</p>
+<h2>Deleting your account</h2>
+<p>You can delete your account on your account page at any time. That deletes your account, passkeys, sessions, team memberships and the tokens of apps at once. Apps keep only what they stored themselves.</p>
+<h2>Email</h2>
+<p>If you email us, we use your address and message only to reply (Art. 6(1)(f) GDPR) and delete them once the matter is settled, unless the law requires us to keep them.</p>
+<h2>Your rights</h2>
+<p>You have the right of access to your personal data (Art. 15 GDPR), to rectification (Art. 16), to erasure (Art. 17), to restriction of processing (Art. 18) and to data portability (Art. 20). To exercise them, email us. You can also lodge a complaint with a data protection supervisory authority (Art. 77 GDPR), for example the one where you live or the one responsible for us: ${esc(l.authority)}.</p>
+<h2>Right to object</h2>
+<p><strong>You may object at any time, on grounds relating to your particular situation, to the processing of your personal data based on Art. 6(1)(f) GDPR (Art. 21 GDPR).</strong></p>`;
+}
+
+function privacyDe(address: string, mail: string, l: Legal, o: { turnstile: boolean }) {
+  return `<p>stem ist der Anmeldedienst für die Apps von shiftbloom studio. Du legst hier einmal ein Konto an und meldest dich damit bei diesen Apps an. Diese Erklärung beschreibt, was wir dafür speichern, wer es sehen kann und wann es gelöscht wird. Es gibt kein Tracking und keine Werbung, wir werten dein Verhalten nicht aus und treffen keine automatisierten Entscheidungen über dich.</p>
+<h2>Verantwortlicher</h2>${address}<p>E-Mail: ${mail}</p>
+<h2>Hosting</h2>
+<p>Cloudflare, Inc., 101 Townsend St., San Francisco, CA 94107, USA, betreibt stem in unserem Auftrag: die Seiten, die Datenbank (Cloudflare D1) und das Programm dahinter (einen Cloudflare Worker). Um dir eine Seite zu zeigen, verarbeitet Cloudflare deine IP-Adresse, die Adresse der Seite, den Zeitpunkt und Angaben, die dein Browser mitsendet, etwa den User-Agent. Anfragen, die der Worker bearbeitet, werden zusätzlich protokolliert, samt IP-Adresse und dem ungefähren Standort, den Cloudflare daraus ableitet. Wir nutzen diese Protokolle nur, um Fehler zu beheben und Missbrauch zu stoppen; sie werden nach spätestens 7 Tagen gelöscht.</p>
+<p>Schriften lädt unser Worker selbst und liefert sie von stem aus, dein Browser verbindet sich also nicht mit Fontshare oder jsDelivr.</p>
+<p>Rechtsgrundlage ist unser berechtigtes Interesse an einem sicheren und zuverlässigen Betrieb von stem (Art. 6 Abs. 1 lit. f DSGVO). Cloudflare verarbeitet die Daten als unser Auftragsverarbeiter auf Grundlage eines Auftragsverarbeitungsvertrags (Art. 28 DSGVO). Cloudflare, Inc. ist nach dem EU-U.S. Data Privacy Framework zertifiziert, für das ein Angemessenheitsbeschluss der Europäischen Kommission besteht (Art. 45 DSGVO); der Vertrag enthält zusätzlich die EU-Standardvertragsklauseln. Mehr dazu in der <a href="https://www.cloudflare.com/de-de/privacypolicy/">Datenschutzerklärung von Cloudflare</a>.</p>
+<h2>Dein Konto</h2>
+<p>Dein Konto besteht aus deiner E-Mail-Adresse, dem Namen, den du angibst, ob deine Adresse bestätigt ist, einer zufälligen Nutzer-ID und wann das Konto angelegt und zuletzt geändert wurde. Wir brauchen es, um dich anzumelden und Apps mitzuteilen, wer du bist (Art. 6 Abs. 1 lit. b DSGVO).</p>
+<p><strong>Codes per E-Mail.</strong> Wenn du einen Anmeldecode anforderst, schicken wir ihn an deine Adresse und speichern davon nur eine Prüfsumme für 10 Minuten. Die E-Mail wird über Cloudflare Email Service versendet, der deine Adresse und die Nachricht als unser Auftragsverarbeiter verarbeitet.</p>
+<p><strong>Passkeys.</strong> Zu jedem Passkey speichern wir seinen öffentlichen Schlüssel, seine ID, einen Namen, ob er zwischen Geräten synchronisiert wird, welche Art von Authenticator ihn erstellt hat (zum Beispiel ein Passwortmanager) und wann er hinzugefügt wurde. Der private Schlüssel verlässt dein Gerät nie, und deinen Fingerabdruck, dein Gesicht oder deine PIN sehen wir nicht.</p>
+<p><strong>Sitzungen.</strong> Solange du angemeldet bist, speichern wir eine Sitzung mit Beginn und Ablauf, deiner IP-Adresse und dem User-Agent deines Browsers, damit du siehst, wo du angemeldet bist, und Sitzungen beenden kannst, die du nicht kennst. Eine Sitzung endet, wenn du dich abmeldest, nach 30 Tagen ohne Nutzung oder wenn du sie auf deiner Kontoseite beendest.</p>
+<h2>Apps, bei denen du dich anmeldest</h2>
+<p>Wenn du dich mit stem bei einer App anmeldest, erfährt die App deine Nutzer-ID und, wenn sie danach fragt und du zustimmst (oder es eine unserer eigenen Apps ist), deinen Namen, deine E-Mail-Adresse und in welchen ihrer Teams du mit welcher Rolle bist. Wir speichern, dass du zugestimmt hast, und die Tokens, mit denen die App dich angemeldet hält, als Prüfsummen, bis zu 30 Tage nach ihrer letzten Nutzung. Für das, was eine App mit diesen Daten macht, ist sie selbst verantwortlich; mehr steht in ihrer eigenen Datenschutzerklärung. Rechtsgrundlage ist die Anmeldung, um die du bittest (Art. 6 Abs. 1 lit. b DSGVO).</p>
+<h2>Teams und Einladungen</h2>
+<p>Apps können Konten in Teams (Organisationen) zusammenfassen. Zu jedem Team speichern wir seinen Namen, welche Konten dazugehören und ihre Rollen. Wenn dich jemand einlädt, speichern wir deine E-Mail-Adresse, die Rolle, wer dich eingeladen hat und den Stand der Einladung, und schicken dir eine E-Mail mit dem Link. Hast du noch kein Konto, kann für deine Adresse ein unbestätigtes angelegt werden, damit die Einladung dich findet; es bleibt unbestätigt, bis du dich anmeldest. Einladungen laufen nach der vom Team festgelegten Zeit ab, spätestens nach 30 Tagen. Rechtsgrundlage ist das Interesse des Teams und dein Interesse, in der App zusammenzuarbeiten (Art. 6 Abs. 1 lit. f DSGVO).</p>
+<h2>Schutz vor Missbrauch</h2>
+<p>Damit niemand Codes errät oder Postfächer flutet, zählt stem Anfragen je IP-Adresse und Endpunkt für einige Minuten, in seiner Datenbank und in Cloudflares Rate-Limiter, und weist Anfragen oberhalb einer Grenze ab. Die Zählung wird mit der Zeit überschrieben.${o.turnstile ? ` Das Anfordern eines Codes ist außerdem durch Cloudflare Turnstile geschützt, das prüft, ob ein Mensch oder ein Programm das Formular ausfüllt. Dazu lädt dein Browser ein Skript von challenges.cloudflare.com, und Cloudflare verarbeitet technische Daten über deinen Browser und dein Gerät. Mehr dazu im <a href="https://www.cloudflare.com/turnstile-privacy-policy/">Turnstile-Datenschutzhinweis von Cloudflare</a>.` : ""} Rechtsgrundlage ist unser berechtigtes Interesse, Konten zu schützen (Art. 6 Abs. 1 lit. f DSGVO).</p>
+<h2>Cookies</h2>
+<p>stem setzt bei der Anmeldung ein Sitzungs-Cookie und kurzlebige Cookies, die den Stand einer laufenden Anmeldung halten. Sie werden nur an stem selbst gesendet, nie an die Apps, und sind für die Anmeldung unbedingt erforderlich (§ 25 Abs. 2 Nr. 2 TDDDG).${o.turnstile ? " Auch Turnstile kann für die von dir gestartete Prüfung Daten in deinem Browser speichern." : ""} Die Anmeldeseite merkt sich im lokalen Speicher deines Browsers, wenn du beim Passkey „Not now“ gewählt hast.</p>
+<h2>Konto löschen</h2>
+<p>Du kannst dein Konto jederzeit auf deiner Kontoseite löschen. Damit werden dein Konto, deine Passkeys, Sitzungen, Teammitgliedschaften und die Tokens der Apps sofort gelöscht. Apps behalten nur, was sie selbst gespeichert haben.</p>
+<h2>E-Mail</h2>
+<p>Wenn du uns schreibst, nutzen wir deine Adresse und Nachricht nur, um dir zu antworten (Art. 6 Abs. 1 lit. f DSGVO), und löschen sie, sobald die Sache erledigt ist, es sei denn, das Gesetz verpflichtet uns zur Aufbewahrung.</p>
+<h2>Deine Rechte</h2>
+<p>Du hast das Recht auf Auskunft über deine personenbezogenen Daten (Art. 15 DSGVO), auf Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18) und Datenübertragbarkeit (Art. 20). Schreib uns dazu eine E-Mail. Außerdem kannst du dich bei einer Datenschutz-Aufsichtsbehörde beschweren (Art. 77 DSGVO), etwa bei der an deinem Wohnort oder bei der für uns zuständigen: ${esc(l.authority)}.</p>
+<h2>Widerspruchsrecht</h2>
+<p><strong>Du kannst der Verarbeitung deiner personenbezogenen Daten auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO jederzeit aus Gründen widersprechen, die sich aus deiner besonderen Situation ergeben (Art. 21 DSGVO).</strong></p>`;
+}
