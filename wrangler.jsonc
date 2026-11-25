@@ -1,0 +1,47 @@
+// stem: Cloudflare Workers config.
+// Before the first deploy, create the D1 database (see README, "Self-hosting") and
+// replace the <placeholders> below. Operator details and secrets never go in this file.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "stem",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // Serve on your own (sub)domain. The zone must be on the same Cloudflare account.
+  // "routes": [{ "pattern": "stem.example.com", "custom_domain": true }],
+  // No workers.dev or preview URLs: an auth service must only answer on its issuer origin.
+  "workers_dev": false,
+  "preview_urls": false,
+
+  "vars": {
+    "STEM_URL": "https://stem.example.com",
+    "EMAIL_FROM": "stem <login@example.com>",
+    // Extra organization roles for your apps, comma separated.
+    "ORG_ROLES": "",
+    // APIs that get JWT access tokens (RFC 8707 resource indicators), comma separated.
+    "RESOURCES": ""
+    // Optional: Turnstile on "email me a code" (also set the TURNSTILE_SECRET secret).
+    // "TURNSTILE_SITE_KEY": "<your-turnstile-site-key>",
+    // Optional: operator details for /imprint, /impressum, /privacy and /datenschutz (hidden when unset).
+    // Set it in the dashboard or your deploy pipeline rather than committing it.
+    // "LEGAL": "{\"name\":\"Jane Doe\",\"street\":\"Example St 1\",\"city\":\"12345 Town\",\"country\":{\"en\":\"Germany\",\"de\":\"Deutschland\"},\"email\":\"jane@example.com\",\"authority\":\"Your data protection authority, address\"}"
+  },
+
+  // Static browser bundle (built by `npm run build:client`). The Worker runs first for every request.
+  "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": true },
+
+  "d1_databases": [{ "binding": "DB", "database_name": "stem-db", "database_id": "<your-d1-database-id>", "migrations_dir": "migrations" }],
+
+  // Cloudflare Email Sending. The domain of EMAIL_FROM must be onboarded to Email Service.
+  "send_email": [{ "name": "EMAIL" }],
+
+  // Per IP and minute, on top of Better Auth's own per-endpoint limits (stored in D1).
+  "ratelimits": [
+    { "name": "AUTH_RL", "namespace_id": "2101", "simple": { "limit": 20, "period": 60 } },
+    { "name": "API_RL", "namespace_id": "2102", "simple": { "limit": 300, "period": 60 } }
+  ]
+  // Secrets (not in this file): BETTER_AUTH_SECRET, OPERATOR_TOKEN, TURNSTILE_SECRET
+  // → `npx wrangler secret put BETTER_AUTH_SECRET`
+}

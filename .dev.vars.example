@@ -1,0 +1,13 @@
+# Copy to .dev.vars for `npm run dev`. Never commit .dev.vars.
+# Generate secrets with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+BETTER_AUTH_SECRET=change-me-to-32-random-bytes
+OPERATOR_TOKEN=change-me-to-32-random-bytes
+
+# Local only: serve on localhost and print sign-in codes to the console instead of emailing them.
+STEM_URL=http://localhost:8787
+DEV_LOG_EMAIL=true
+
+# Optional: Turnstile's test secret that always passes (pair it with site key 1x00000000000000000000AA).
+# TURNSTILE_SITE_KEY=1x00000000000000000000AA
+# TURNSTILE_SECRET=1x0000000000000000000000000000000AA

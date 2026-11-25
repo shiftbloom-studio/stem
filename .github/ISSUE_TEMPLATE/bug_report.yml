@@ -1,0 +1,29 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Upload a .webp via ShareX\n2. Open the link\n3. …"
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client
+      description: ShareX version, browser, curl, …
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or response body
+      description: Remove tokens and delete URLs before pasting.
+      render: text
