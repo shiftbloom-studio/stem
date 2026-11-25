@@ -98,3 +98,10 @@ The token lasts 5 minutes. Send it as `Authorization: Bearer …` to:
 | `GET /api/v1/users/:id` | `{ id, email, name, email_verified }`, only for members of your organizations. |
 
 Errors are JSON: `{ "error": "code", "detail"?: "text" }` with a fitting HTTP status.
+
+## Things to know
+
+- `sub` is the same for a person across all apps on one stem. Don't treat it as a secret.
+- The directory API can add any existing stem account to one of your organizations by email or user id, without an invitation. That's meant for first-party apps registered by the operator; use invitations when the person should agree first.
+- People can't change organizations on stem itself. Renaming, metadata, members and deletion all go through your app and the directory API.
+- Per-IP limits treat every IPv6 address on its own.

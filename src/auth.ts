@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Better Auth instance behind stem. One instance per isolate and environment.
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, APIError } from "better-auth/api";
+import { emailLimits } from "./limits";
 import { emailOTP, organization, jwt, captcha } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -40,6 +41,16 @@ const isOperator = (env: Env, headers?: Headers | null) => {
   return !!(v && env.OPERATOR_TOKEN && env.OPERATOR_TOKEN.length >= 32 && timingSafeEqual(v, env.OPERATOR_TOKEN));
 };
 
+/** Organization endpoints people may call themselves. Everything else about an organization
+ * (name, slug, metadata, members, deletion) belongs to its app and goes through the directory API. */
+export const USER_ORG_PATHS = new Set([
+  "/organization/list",
+  "/organization/get-invitation",
+  "/organization/list-user-invitations",
+  "/organization/accept-invitation",
+  "/organization/reject-invitation",
+]);
+
 export function createAuth(env: Env, exec?: Exec) {
   const url = new URL(env.STEM_URL);
   const { ac, roles } = accessControl(env.ORG_ROLES);
@@ -54,6 +65,8 @@ export function createAuth(env: Env, exec?: Exec) {
     secret: env.BETTER_AUTH_SECRET,
     database: env.DB,
     trustedOrigins: [url.origin],
+    // The session-to-JWT shortcut isn't needed: apps get tokens through OpenID Connect only.
+    disabledPaths: ["/token"],
     // Passwordless: email codes and passkeys only. No password to phish, reuse or reset.
     emailAndPassword: { enabled: false },
     emailVerification: { autoSignInAfterVerification: true },
@@ -92,6 +105,7 @@ export function createAuth(env: Env, exec?: Exec) {
       // The operator API registers clients through Better Auth's admin endpoint, which wants a session.
       // It gets a synthetic operator session, only for server-side calls that carry the operator token.
       before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path.startsWith("/organization/") && !USER_ORG_PATHS.has(ctx.path)) throw new APIError("NOT_FOUND");
         if (ctx.path !== "/admin/oauth2/create-client" || !isOperator(env, ctx.headers)) return;
         const now = new Date();
         ctx.context.session = {
@@ -104,6 +118,7 @@ export function createAuth(env: Env, exec?: Exec) {
       ...(turnstile
         ? [captcha({ provider: "cloudflare-turnstile", secretKey: env.TURNSTILE_SECRET!, endpoints: ["/email-otp/send-verification-otp"], allowedHostnames: [url.hostname] })]
         : []),
+      emailLimits(),
       emailOTP({
         otpLength: 6,
         expiresIn: 600,
@@ -118,7 +133,8 @@ export function createAuth(env: Env, exec?: Exec) {
         rpID: url.hostname,
         rpName: "stem",
         origin: url.origin,
-        authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },
+        // A passkey is the only factor, so it must prove the person (PIN or biometric), not just possession.
+        authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
       }),
       organization({
         ac,
@@ -139,9 +155,9 @@ export function createAuth(env: Env, exec?: Exec) {
         },
       }),
       jwt({
-        jwks: { keyPairConfig: { alg: "EdDSA", crv: "Ed25519" } },
+        // New signing key every 90 days; old keys stay in the JWKS for 30 more days, longer than any signed token lives.
+        jwks: { keyPairConfig: { alg: "EdDSA", crv: "Ed25519" }, rotationInterval: 60 * 60 * 24 * 90, gracePeriod: 60 * 60 * 24 * 30 },
         jwt: { issuer: url.origin, expirationTime: "10m" },
-        // Clients use OpenID Connect tokens; the /token session-to-JWT shortcut is not needed.
         disableSettingJwtHeader: true,
       }),
       oauthProvider({

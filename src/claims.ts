@@ -11,11 +11,17 @@ export type ClaimsAdapter = {
 export async function orgClaims(db: ClaimsAdapter, userId: string, app: string): Promise<Record<string, string>> {
   const members = await db.findMany<{ organizationId: string; role: string }>({ model: "member", where: [{ field: "userId", value: userId }], limit: 500 });
   if (!members.length) return {};
-  const orgs = await db.findMany<{ id: string }>({
-    model: "organization",
-    where: [{ field: "id", operator: "in", value: members.map((m) => m.organizationId) }, { field: "app", value: app }],
-    limit: MAX_ORGS_IN_TOKEN,
-  });
-  const inApp = new Set(orgs.map((o) => o.id));
+  const inApp = new Set<string>();
+  // D1 binds at most 100 parameters per query, so look organizations up in chunks.
+  for (const ids of chunks(members.map((m) => m.organizationId), 90)) {
+    const orgs = await db.findMany<{ id: string }>({ model: "organization", where: [{ field: "id", operator: "in", value: ids }, { field: "app", value: app }], limit: ids.length });
+    for (const o of orgs) inApp.add(o.id);
+  }
   return Object.fromEntries(members.filter((m) => inApp.has(m.organizationId)).slice(0, MAX_ORGS_IN_TOKEN).map((m) => [m.organizationId, m.role]));
+}
+
+export function chunks<T>(list: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
 }

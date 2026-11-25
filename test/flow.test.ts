@@ -37,11 +37,11 @@ function makeEnv(extra: Partial<Env> = {}): Env {
 
 class Browser {
   cookies = new Map<string, string>();
-  constructor(private env: Env) {}
+  constructor(private env: Env, public ip = "203.0.113.7") {}
   async fetch(path: string, init: RequestInit = {}) {
     const headers = new Headers(init.headers);
     headers.set("origin", ORIGIN);
-    headers.set("cf-connecting-ip", "203.0.113.7");
+    headers.set("cf-connecting-ip", this.ip);
     if (this.cookies.size) headers.set("cookie", [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; "));
     const res = await app.fetch(new Request(new URL(path, ORIGIN), { ...init, headers, redirect: "manual" }), this.env, ctx as never);
     for (const c of res.headers.getSetCookie()) {
@@ -135,6 +135,38 @@ describe("stem", () => {
     expect(user.id).toBe(ownerId);
     expect([...browser.cookies.keys()].some((k) => k.startsWith("__Secure-stem."))).toBe(true);
     expect((await browser.fetch("/account")).status).toBe(200);
+  });
+
+  it("limits codes per address, whatever the IP", async () => {
+    const email = "target@example.com";
+    const first = await new Browser(env, "198.51.100.1").json("/api/auth/email-otp/send-verification-otp", { email, type: "sign-in" });
+    expect(first.status).toBe(200);
+    const second = await new Browser(env, "198.51.100.2").json("/api/auth/email-otp/send-verification-otp", { email: "Target@Example.com", type: "sign-in" });
+    expect(second.status).toBe(429);
+    const statuses: number[] = [];
+    for (let i = 0; i < 16; i++) {
+      const r = await new Browser(env, `198.51.100.${10 + i}`).json("/api/auth/sign-in/email-otp", { email, otp: String(100000 + i) });
+      statuses.push(r.status);
+    }
+    expect(statuses.slice(0, 15).every((st) => st !== 429 && st >= 400)).toBe(true);
+    expect(statuses[15]).toBe(429);
+    // Even the right code is refused once the address is locked for the day.
+    const code = /(\d{6})/.exec(sent.filter((m) => m.to === email).at(-1)!.text)![1];
+    expect((await new Browser(env, "198.51.100.99").json("/api/auth/sign-in/email-otp", { email, otp: code })).status).toBe(429);
+  });
+
+  it("keeps organizations in the app's hands", async () => {
+    for (const path of ["update", "delete", "invite-member", "update-member-role", "remove-member", "create", "set-active", "leave"]) {
+      const r = await browser.json(`/api/auth/organization/${path}`, { organizationId: orgId, data: { slug: "renamed" } });
+      expect(r.status, path).toBe(404);
+    }
+    const list = await browser.fetch("/api/auth/organization/list");
+    expect(list.status).toBe(200);
+    expect(((await list.json()) as { slug: string }[]).map((o) => o.slug)).toEqual(["va"]);
+  });
+
+  it("doesn't hand out session JWTs", async () => {
+    expect((await browser.fetch("/api/auth/token")).status).toBe(404);
   });
 
   it("rejects a wrong code", async () => {
