@@ -218,6 +218,13 @@ describe("stem", () => {
     expect(rr.status).toBe(200);
     const refreshed = (await rr.json()) as { refresh_token: string };
     expect(refreshed.refresh_token).not.toBe(tokens.refresh_token);
+    const again = await browser.fetch("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { authorization: basic, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: tokens.refresh_token, resource: API }),
+    });
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { refresh_token: string }).refresh_token).toBe(refreshed.refresh_token);
   });
 
   it("sends a signed-out person to sign in and back to the app", async () => {
