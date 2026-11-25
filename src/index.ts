@@ -10,6 +10,7 @@ import { faviconSvg } from "./bloom";
 import { robotsTxt, parseLegal, safeNext } from "./util";
 import { landingPage, signInPage, accountPage, consentPage, invitePage, messagePage, type Ui } from "./ui/pages";
 import { legalPage, LEGAL_PATHS } from "./ui/legal";
+import { cleanup } from "./cleanup";
 
 const TURNSTILE = "https://challenges.cloudflare.com";
 const CSP = [
@@ -173,4 +174,14 @@ app.onError((e, c) => {
   return c.req.path.startsWith("/api/") ? c.json({ error: "server_error" }, 500) : html(messagePage(ui(c.env), "Something broke", "That's on us. Try again in a moment.", "error"), 500);
 });
 
-export default app;
+/** Daily: delete expired sessions, codes, counters, tokens and invitations (see src/cleanup.ts). */
+async function scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+  ctx.waitUntil(
+    (async () => {
+      const db = (await createAuth(env, ctx).$context).adapter;
+      console.log("[stem] cleanup", JSON.stringify(await cleanup(db as never)));
+    })().catch((e) => console.error("[stem] cleanup failed", e)),
+  );
+}
+
+export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;

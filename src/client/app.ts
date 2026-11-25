@@ -260,6 +260,23 @@ async function account() {
     for (const o of list) ul.append(li(o.name, o.slug));
   }
 
+  async function loadApps() {
+    const ul = $("apps"); if (!ul) return;
+    ul.replaceChildren();
+    const res = await client.$fetch<{ client_id: string; name: string; last_used: string | null }[]>("/stem/apps", { method: "GET" });
+    const list = res.data || [];
+    if (!list.length) { ul.append(li("No apps", "Apps show up here once you sign in to them.")); return; }
+    for (const a of list)
+      ul.append(li(a.name, a.last_used ? `Last used ${fmt(a.last_used)}` : "Allowed", {
+        label: "Remove",
+        run: async () => {
+          if (!confirm(`Remove ${a.name}'s access? It can't use your account anymore until you sign in to it again.`)) return;
+          const r = await client.$fetch("/stem/apps/remove", { method: "POST", body: { client_id: a.client_id } });
+          if (r.error) fail(explain(r.error as ApiError)); else loadApps();
+        },
+      }));
+  }
+
   $("revoke-others")?.addEventListener("click", async () => {
     const r = await client.revokeOtherSessions();
     if (r.error) fail(explain(r.error as ApiError)); else loadSessions();
@@ -272,7 +289,7 @@ async function account() {
     location.assign("/");
   });
 
-  await Promise.all([loadPasskeys(), loadSessions(), loadOrgs()]);
+  await Promise.all([loadPasskeys(), loadSessions(), loadOrgs(), loadApps()]);
 }
 
 // ---------- consent ----------

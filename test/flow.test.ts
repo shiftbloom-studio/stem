@@ -6,7 +6,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { createLocalJWKSet, jwtVerify, decodeJwt, type JSONWebKeySet } from "jose";
 import app from "../src/index";
-import { UNUSED_PATHS } from "../src/auth";
+import { UNUSED_PATHS, createAuth } from "../src/auth";
+import { cleanup } from "../src/cleanup";
 import type { Env } from "../src/env";
 
 const ORIGIN = "https://stem.test";
@@ -83,6 +84,7 @@ describe("stem", () => {
   let client: { client_id: string; client_secret: string };
   let orgId: string;
   let ownerId: string;
+  let refreshToken: string;
 
   beforeAll(async () => {
     env = makeEnv();
@@ -248,6 +250,42 @@ describe("stem", () => {
     });
     expect(again.status).toBe(200);
     expect(((await again.json()) as { refresh_token: string }).refresh_token).toBe(refreshed.refresh_token);
+    refreshToken = refreshed.refresh_token;
+  });
+
+  it("exports a person's data without secrets", async () => {
+    const r = await browser.fetch("/api/auth/stem/export");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-disposition")).toMatch(/^attachment; filename="stem-data-/);
+    const text = await r.text();
+    const data = JSON.parse(text) as { account: { email: string }; teams: { organization: { id: string }; role: string }[]; sessions: unknown[]; apps: { client_id: string }[] };
+    expect(data.account.email).toBe("owner@example.com");
+    expect(data.teams).toEqual([expect.objectContaining({ organization: expect.objectContaining({ id: orgId, app: "demo" }), role: "owner" })]);
+    expect(data.sessions.length).toBeGreaterThan(0);
+    expect(data.apps.map((a) => a.client_id)).toContain(client.client_id);
+    expect(text).not.toContain(refreshToken);
+    expect(text).not.toMatch(/"(token|publicKey|privateKey|clientSecret|value)"/);
+    expect((await new Browser(env).fetch("/api/auth/stem/export")).status).toBe(401);
+  });
+
+  it("lets a person remove an app's access", async () => {
+    const list = (await (await browser.fetch("/api/auth/stem/apps")).json()) as { client_id: string; name: string }[];
+    expect(list).toEqual([expect.objectContaining({ client_id: client.client_id, name: "Demo App" })]);
+    // Another site can't do it for them.
+    const cookie = [...browser.cookies].map(([k, v]) => `${k}=${v}`).join("; ");
+    const forged = await app.fetch(new Request(`${ORIGIN}/api/auth/stem/apps/remove`, { method: "POST", body: JSON.stringify({ client_id: client.client_id }), headers: { "content-type": "application/json", origin: "https://evil.test", cookie } }), env, ctx as never);
+    expect(forged.status).toBe(403);
+    const forgedRename = await app.fetch(new Request(`${ORIGIN}/api/auth/update-user`, { method: "POST", body: JSON.stringify({ name: "pwned" }), headers: { "content-type": "application/json", origin: "https://evil.test", cookie } }), env, ctx as never);
+    expect(forgedRename.status).toBe(403);
+    expect((await browser.json("/api/auth/stem/apps/remove", { client_id: client.client_id })).status).toBe(200);
+    expect(await (await browser.fetch("/api/auth/stem/apps")).json()).toEqual([]);
+    const basic = "Basic " + btoa(`${client.client_id}:${client.client_secret}`);
+    const rr = await browser.fetch("/api/auth/oauth2/token", {
+      method: "POST",
+      headers: { authorization: basic, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken, resource: API }),
+    });
+    expect(rr.status).toBeGreaterThanOrEqual(400);
   });
 
   it("sends a signed-out person to sign in and back to the app", async () => {
@@ -371,5 +409,38 @@ describe("stem", () => {
       expect(o.name).toBe("Virtual Airline Two");
       expect(o.metadata.icao).toBe("VAT");
     });
+  });
+});
+
+describe("cleanup", () => {
+  it("deletes expired and unneeded personal data, and keeps the rest", async () => {
+    const env = makeEnv();
+    const b = new Browser(env, "203.0.113.50");
+    const ro = await op(b, "/orgs", { app: "demo", name: "Kept Team", slug: "kept", owner_email: "keep@example.com" });
+    expect(ro.status).toBe(201);
+    await signIn(b, "active@example.com");
+    // An abandoned code for someone who never signed in.
+    await new Browser(env, "203.0.113.51").json("/api/auth/email-otp/send-verification-otp", { email: "abandoned@example.com", type: "sign-in" });
+    const db = (await createAuth(env).$context).adapter;
+    const old = new Date(Date.now() - 40 * 24 * 3600 * 1000);
+    await db.create({ model: "user", data: { email: "gone@example.com", name: "", emailVerified: false, createdAt: old, updatedAt: old } });
+
+    // Nothing is due yet.
+    const now = await cleanup(db as never);
+    expect(now.unconfirmedAccounts).toBe(1);
+    expect(now.sessions).toBe(0);
+    const emails = async () => (await db.findMany<{ email: string }>({ model: "user", limit: 100 })).map((u) => u.email).sort();
+    expect(await emails()).toEqual(["active@example.com", "keep@example.com"]);
+
+    // 31 days on, sessions, codes, counters and the unconfirmed member's limbo are handled.
+    const later = await cleanup(db as never, Date.now() + 31 * 24 * 3600 * 1000);
+    expect(later.sessions).toBeGreaterThan(0);
+    expect(later.verifications).toBeGreaterThan(0);
+    expect(later.rateLimits).toBeGreaterThan(0);
+    expect(later.emailLimits).toBeGreaterThan(0);
+    expect(await db.count({ model: "session" })).toBe(0);
+    expect(await db.count({ model: "verification" })).toBe(0);
+    // A confirmed account and an unconfirmed one that is still in a team stay.
+    expect(await emails()).toEqual(["active@example.com", "keep@example.com"]);
   });
 });

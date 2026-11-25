@@ -3,6 +3,7 @@
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware, APIError } from "better-auth/api";
 import { emailLimits, CODE_LIFETIME_MS } from "./limits";
+import { accountTools } from "./account";
 import { emailOTP, organization, jwt, captcha } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -116,6 +117,10 @@ export function createAuth(env: Env, exec?: Exec) {
       },
     },
     advanced: {
+      // Always check Origin on cookie requests. Better Auth skips it when NODE_ENV or TEST say "test",
+      // and on Workers those can come from a stray variable; tests should see what production does.
+      disableOriginCheck: false,
+      disableCSRFCheck: false,
       useSecureCookies: url.protocol === "https:",
       cookiePrefix: "stem",
       // Host-only cookies on the stem origin. Apps never see them: they get tokens through OpenID Connect.
@@ -143,6 +148,7 @@ export function createAuth(env: Env, exec?: Exec) {
         ? [captcha({ provider: "cloudflare-turnstile", secretKey: env.TURNSTILE_SECRET!, endpoints: ["/email-otp/send-verification-otp"], allowedHostnames: [url.hostname] })]
         : []),
       emailLimits(),
+      accountTools(),
       emailOTP({
         otpLength: 6,
         expiresIn: CODE_LIFETIME_MS / 1000,

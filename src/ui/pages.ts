@@ -120,6 +120,16 @@ export function accountPage(ui: Ui) {
       <ul class="rows" id="orgs" style="margin-top:8px"></ul>
     </section>
     <section class="panel sect">
+      <h2>Apps with access</h2>
+      <p class="small">Apps that can keep you signed in or that you said yes to. Removing one ends its access to your account within ten minutes.</p>
+      <ul class="rows" id="apps" style="margin-top:8px"></ul>
+    </section>
+    <section class="panel sect">
+      <h2>Your data</h2>
+      <p class="small">Everything stem stores about you, as one JSON file: your account, passkeys, sessions, teams, invitations and apps.</p>
+      <a class="btn ghost sm" href="/api/auth/stem/export" download style="margin-top:12px">Download my data</a>
+    </section>
+    <section class="panel sect">
       <h2>Delete your account</h2>
       <p class="small">This removes your account, passkeys, sessions and team memberships at once. Apps keep only what they stored themselves.</p>
       <button class="btn ghost sm" type="button" id="delete-account" style="margin-top:12px">Delete my account</button>
@@ -152,7 +162,7 @@ export function consentPage(ui: Ui, client: { name: string; uri: string | null }
     <ul class="seedlist">${items}</ul>
     <button class="btn wide" type="button" id="allow">Allow</button>
     <button class="btn ghost wide" type="button" id="deny">Cancel</button>
-    <p class="small">You can take this back any time by signing out of the app.</p>
+    <p class="small">You can take this back any time on your <a href="/account">stem account page</a>.</p>
     <p class="err" id="error" role="alert" hidden></p>
   </div>
 </section>`,

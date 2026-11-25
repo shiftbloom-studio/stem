@@ -31,6 +31,9 @@
     // "LEGAL": "{\"name\":\"Jane Doe\",\"street\":\"Example St 1\",\"city\":\"12345 Town\",\"country\":{\"en\":\"Germany\",\"de\":\"Deutschland\"},\"email\":\"jane@example.com\",\"authority\":\"Your data protection authority, address\"}"
   },
 
+  // Daily cleanup of expired sessions, codes, counters, tokens and invitations (src/cleanup.ts).
+  "triggers": { "crons": ["23 3 * * *"] },
+
   // Static browser bundle (built by `npm run build:client`). The Worker runs first for every request.
   "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": true },
 
