@@ -1,6 +1,6 @@
-// stem: Cloudflare Workers config for stem.shiftbloom.studio.
-// When you fork, create your own D1 database (see README, "Self-hosting") and replace the
-// hostname, database id, sender and Turnstile key below. Operator details and secrets never go in this file.
+// stem: Cloudflare Workers config. A template: values written as <PLACEHOLDER> are filled from
+// environment variables by scripts/render-config.mjs, which writes wrangler.deploy.jsonc (not committed).
+// See README, "Self-hosting". Operator details and secrets never go in this file.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "stem",
@@ -10,7 +10,7 @@
   "observability": { "enabled": true },
 
   // Serve on your own (sub)domain. The zone must be on the same Cloudflare account.
-  "routes": [{ "pattern": "stem.shiftbloom.studio", "custom_domain": true }],
+  "routes": [{ "pattern": "<STEM_HOSTNAME>", "custom_domain": true }],
   // No workers.dev or preview URLs: an auth service must only answer on its issuer origin.
   "workers_dev": false,
   "preview_urls": false,
@@ -18,14 +18,14 @@
   // Keep variables set in the dashboard (LEGAL) across deploys.
   "keep_vars": true,
   "vars": {
-    "STEM_URL": "https://stem.shiftbloom.studio",
-    "EMAIL_FROM": "stem <login@stem.shiftbloom.studio>",
+    "STEM_URL": "https://<STEM_HOSTNAME>",
+    "EMAIL_FROM": "<EMAIL_FROM>",
     // Extra organization roles for your apps, comma separated.
-    "ORG_ROLES": "dispatcher,pilot",
+    "ORG_ROLES": "<ORG_ROLES?>",
     // APIs that get JWT access tokens (RFC 8707 resource indicators), comma separated.
-    "RESOURCES": "https://www.va-dispatcher.world/api",
+    "RESOURCES": "<RESOURCES?>",
     // Turnstile on "email me a code" (also set the TURNSTILE_SECRET secret).
-    "TURNSTILE_SITE_KEY": "0x4AAAAAAGTDsdmlboms8_4Y"
+    "TURNSTILE_SITE_KEY": "<TURNSTILE_SITE_KEY?>"
     // Optional: operator details for /imprint, /impressum, /privacy and /datenschutz (hidden when unset).
     // Set it in the dashboard or your deploy pipeline rather than committing it.
     // "LEGAL": "{\"name\":\"Jane Doe\",\"street\":\"Example St 1\",\"city\":\"12345 Town\",\"country\":{\"en\":\"Germany\",\"de\":\"Deutschland\"},\"email\":\"jane@example.com\",\"authority\":\"Your data protection authority, address\"}"
@@ -37,7 +37,7 @@
   // Static browser bundle (built by `npm run build:client`). The Worker runs first for every request.
   "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": true },
 
-  "d1_databases": [{ "binding": "DB", "database_name": "stem-db", "database_id": "6dde6bfc-431d-4993-a395-5ec9de8bf921", "migrations_dir": "migrations" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "stem-db", "database_id": "<STEM_D1_DATABASE_ID>", "migrations_dir": "migrations" }],
 
   // Cloudflare Email Sending. The domain of EMAIL_FROM must be onboarded to Email Service.
   "send_email": [{ "name": "EMAIL" }],
