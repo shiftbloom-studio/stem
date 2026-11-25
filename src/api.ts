@@ -10,6 +10,7 @@ import { createAuth, directoryAudience, resourceList, SCOPES, DIRECTORY_SCOPE, O
 import { isRole, roleNames } from "./roles";
 import { inviteMail, sendMail } from "./email";
 import { timingSafeEqual } from "./util";
+import { chunks } from "./claims";
 
 type Vars = { auth: Auth; app: string; clientId: string };
 type C = Context<{ Bindings: Env; Variables: Vars }>;
@@ -207,7 +208,8 @@ export function apiRoutes() {
       db.findMany<Member>({ model: "member", where, limit, offset, sortBy: { field: "createdAt", direction: "asc" } }),
       db.count({ model: "member", where }),
     ]);
-    const users = members.length ? await db.findMany<User>({ model: "user", where: [{ field: "id", operator: "in", value: members.map((m) => m.userId) }] }) : [];
+    const users: User[] = [];
+    for (const ids of chunks(members.map((m) => m.userId), 90)) users.push(...(await db.findMany<User>({ model: "user", where: [{ field: "id", operator: "in", value: ids }], limit: ids.length })));
     const byId = new Map(users.map((u) => [u.id, u]));
     return c.json({
       data: members.map((m) => ({ user_id: m.userId, role: m.role, created_at: iso(m.createdAt), user: byId.has(m.userId) ? userOut(byId.get(m.userId)!) : null })),
@@ -325,12 +327,13 @@ export function apiRoutes() {
   dir.get("/users/:id", async (c) => {
     const id = c.req.param("id");
     const db = await adapter(c);
-    const memberships = await db.findMany<Member>({ model: "member", where: [{ field: "userId", value: id }], limit: 200 });
-    if (memberships.length) {
-      const orgs = await db.findMany<Org>({ model: "organization", where: [{ field: "id", operator: "in", value: memberships.map((m) => m.organizationId) }, { field: "app", value: c.get("app") }], limit: 1 });
+    const memberships = await db.findMany<Member>({ model: "member", where: [{ field: "userId", value: id }], limit: 500 });
+    for (const ids of chunks(memberships.map((m) => m.organizationId), 90)) {
+      const orgs = await db.findMany<Org>({ model: "organization", where: [{ field: "id", operator: "in", value: ids }, { field: "app", value: c.get("app") }], limit: 1 });
       if (orgs.length) {
         const user = await db.findOne<User>({ model: "user", where: [{ field: "id", value: id }] });
         if (user) return c.json(userOut(user));
+        break;
       }
     }
     return err(c, 404, "not_found");

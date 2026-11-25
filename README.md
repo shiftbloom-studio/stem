@@ -19,12 +19,26 @@ How an app plugs in is described in [docs/integration.md](docs/integration.md).
 ## Security
 
 - No passwords to phish, reuse or reset. Codes are six digits, valid for ten minutes, stored only as a hash and limited to five tries.
-- Sending codes is protected by Cloudflare Turnstile, a per-endpoint limit (five codes per ten minutes) and a per-IP limit through the Workers rate limiting binding.
+- Codes are also limited per address, whatever the IP: one per minute and ten per day, and fifteen sign-in attempts per day across all codes. After that the address is locked until the next day. Rotating IP addresses doesn't buy more guesses.
+- Sending codes is protected by Cloudflare Turnstile, a per-endpoint limit and a per-IP limit through the Workers rate limiting binding.
+- Passkeys must verify the person (PIN or biometric), not just the device.
 - Session cookies are `__Secure-`, `HttpOnly`, `SameSite=Lax` and host-only on stem's origin. Apps never see them; they get tokens.
 - Clients are registered by the operator only. Users can't register clients, and dynamic client registration is off. Redirect URIs must match exactly. PKCE is required.
 - Pages ship without inline scripts under a strict Content Security Policy, with `frame-ancestors 'none'`, HSTS and no third-party requests (fonts are proxied).
 - `workers.dev` and preview URLs are off, so stem only answers on its issuer origin.
-- JWKS private keys are encrypted at rest with `BETTER_AUTH_SECRET`.
+- Organizations are changed only by their app through the directory API. Members can list their teams and answer invitations, nothing more.
+- Tokens come only from the OpenID Connect endpoints; Better Auth's session-to-JWT endpoint is off.
+- The signing key (Ed25519) rotates every 90 days; old keys stay published for 30 more days. Private keys are encrypted at rest with `BETTER_AUTH_SECRET`.
+
+### If a signing key leaks
+
+Delete the keys and let stem make a new one on the next request. Every token signed so far stops verifying, so people sign in to apps again:
+
+```sh
+npx wrangler d1 execute stem-db --remote --command "DELETE FROM jwks"
+```
+
+If `BETTER_AUTH_SECRET` leaks, replace it too (`npx wrangler secret put BETTER_AUTH_SECRET`). That also ends every stem session.
 
 Please report security problems as described in [SECURITY.md](SECURITY.md).
 
