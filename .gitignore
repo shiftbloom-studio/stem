@@ -5,3 +5,6 @@ coverage/
 public/assets/app.js
 .dev.vars
 .env
+.env.deploy
+wrangler.deploy.jsonc
+wrangler.local.jsonc

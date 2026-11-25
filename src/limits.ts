@@ -18,7 +18,8 @@ const VERIFY_PATHS = new Set(["/sign-in/email-otp", "/email-otp/verify-email", "
 
 type Row = { id: string; key: string; windowStart: Date; sends: number; verifies: number; lastSend: Date | null };
 
-async function keyOf(email: string): Promise<string> {
+/** SHA-256 of the lowercased address: the key of its counters. */
+export async function emailKey(email: string): Promise<string> {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email.trim().toLowerCase()));
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -48,7 +49,7 @@ export const emailLimits = () =>
             const email = typeof ctx.body?.email === "string" ? ctx.body.email : "";
             if (!email) return;
             const db = ctx.context.adapter;
-            const key = await keyOf(email);
+            const key = await emailKey(email);
             const now = Date.now();
             let row = await db.findOne<Row>({ model: "emailLimit", where: [{ field: "key", value: key }] });
             if (row && now - new Date(row.windowStart).getTime() > DAY_MS) {

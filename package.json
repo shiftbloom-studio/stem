@@ -17,15 +17,16 @@
     "node": ">=26"
   },
   "scripts": {
-    "dev": "npm run build:client && wrangler dev",
+    "dev": "npm run build:client && node scripts/render-config.mjs --example && wrangler dev -c wrangler.local.jsonc",
     "build:client": "esbuild src/client/app.ts --bundle --format=iife --minify --target=es2022 --outfile=public/assets/app.js",
-    "build": "npm run build:client && wrangler deploy --dry-run --outdir=.wrangler/dry-run",
-    "deploy": "npm run build:client && wrangler deploy",
+    "build": "npm run build:client && node scripts/render-config.mjs --example && wrangler deploy -c wrangler.local.jsonc --dry-run --outdir=.wrangler/dry-run",
+    "deploy": "npm run build:client && node scripts/render-config.mjs && wrangler deploy -c wrangler.deploy.jsonc",
     "typecheck": "tsc -p . && tsc -p tsconfig.client.json",
     "test": "vitest run",
     "check": "npm run typecheck && vitest run && npm run build",
     "db:schema": "esbuild scripts/schema.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=.wrangler/schema.mjs && node .wrangler/schema.mjs",
-    "db:migrate": "wrangler d1 migrations apply stem-db --remote"
+    "db:migrate": "node scripts/render-config.mjs && wrangler d1 migrations apply stem-db --remote -c wrangler.deploy.jsonc",
+    "db:migrate:local": "node scripts/render-config.mjs --example && wrangler d1 migrations apply stem-db --local -c wrangler.local.jsonc"
   },
   "dependencies": {
     "@better-auth/oauth-provider": "1.7.28",

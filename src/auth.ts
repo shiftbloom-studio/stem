@@ -3,6 +3,7 @@
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware, APIError } from "better-auth/api";
 import { emailLimits, CODE_LIFETIME_MS } from "./limits";
+import { accountTools } from "./account";
 import { emailOTP, organization, jwt, captcha } from "better-auth/plugins";
 import { passkey } from "@better-auth/passkey";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -41,6 +42,27 @@ const isOperator = (env: Env, headers?: Headers | null) => {
   return !!(v && env.OPERATOR_TOKEN && env.OPERATOR_TOKEN.length >= 32 && timingSafeEqual(v, env.OPERATOR_TOKEN));
 };
 
+/** Better Auth endpoints that stem has no use for: passwords, email changes and social sign-in. */
+export const UNUSED_PATHS = [
+  "/sign-up/email",
+  "/sign-in/email",
+  "/sign-in/social",
+  "/link-social",
+  "/request-password-reset",
+  "/reset-password",
+  "/change-password",
+  "/verify-password",
+  "/send-verification-email",
+  "/change-email",
+  "/email-otp/request-password-reset",
+  "/forget-password/email-otp",
+  "/email-otp/reset-password",
+  "/email-otp/request-email-change",
+  "/email-otp/change-email",
+];
+/** Codes stem sends: sign-in, and confirming an address. Password-reset codes have nothing to reset. */
+const OTP_TYPES = new Set(["sign-in", "email-verification"]);
+
 /** Organization endpoints people may call themselves. Everything else about an organization
  * (name, slug, metadata, members, deletion) belongs to its app and goes through the directory API. */
 export const USER_ORG_PATHS = new Set([
@@ -66,7 +88,9 @@ export function createAuth(env: Env, exec?: Exec) {
     database: env.DB,
     trustedOrigins: [url.origin],
     // The session-to-JWT shortcut isn't needed: apps get tokens through OpenID Connect only.
-    disabledPaths: ["/token"],
+    // The rest are password, email-change and social endpoints stem doesn't use. Some of them would
+    // email codes without the bot check and the per-address limits, so they're switched off outright.
+    disabledPaths: ["/token", ...UNUSED_PATHS],
     // Passwordless: email codes and passkeys only. No password to phish, reuse or reset.
     emailAndPassword: { enabled: false },
     emailVerification: { autoSignInAfterVerification: true },
@@ -93,6 +117,10 @@ export function createAuth(env: Env, exec?: Exec) {
       },
     },
     advanced: {
+      // Always check Origin on cookie requests. Better Auth skips it when NODE_ENV or TEST say "test",
+      // and on Workers those can come from a stray variable; tests should see what production does.
+      disableOriginCheck: false,
+      disableCSRFCheck: false,
       useSecureCookies: url.protocol === "https:",
       cookiePrefix: "stem",
       // Host-only cookies on the stem origin. Apps never see them: they get tokens through OpenID Connect.
@@ -106,6 +134,7 @@ export function createAuth(env: Env, exec?: Exec) {
       // It gets a synthetic operator session, only for server-side calls that carry the operator token.
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path.startsWith("/organization/") && !USER_ORG_PATHS.has(ctx.path)) throw new APIError("NOT_FOUND");
+        if (ctx.path === "/email-otp/send-verification-otp" && !OTP_TYPES.has(String(ctx.body?.type))) throw new APIError("BAD_REQUEST", { code: "INVALID_OTP_TYPE", message: "Invalid code type." });
         if (ctx.path !== "/admin/oauth2/create-client" || !isOperator(env, ctx.headers)) return;
         const now = new Date();
         ctx.context.session = {
@@ -119,6 +148,7 @@ export function createAuth(env: Env, exec?: Exec) {
         ? [captcha({ provider: "cloudflare-turnstile", secretKey: env.TURNSTILE_SECRET!, endpoints: ["/email-otp/send-verification-otp"], allowedHostnames: [url.hostname] })]
         : []),
       emailLimits(),
+      accountTools(),
       emailOTP({
         otpLength: 6,
         expiresIn: CODE_LIFETIME_MS / 1000,

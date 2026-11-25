@@ -43,6 +43,7 @@ Discovery: `https://stem.example.com/.well-known/openid-configuration`
 - Send `resource=https://www.my-app.example/api` on **both** the authorize and the token request, so the access token is a JWT for your API.
 - Use `state` for your own data (for example the tenant slug to return to) and `nonce` for the ID token.
 - Refresh with `grant_type=refresh_token` (and the same `resource`). Refresh tokens rotate: store the new one every time.
+- A refresh fails once the person removes your app on their stem account page or deletes their account. Treat that like a sign-out.
 - Sign out: redirect to the `end_session_endpoint` with `id_token_hint` and a registered `post_logout_redirect_uri`.
 
 stem's session cookie stays on stem's own host. Apps keep their own session (for example an encrypted cookie holding the refresh token) and never see stem's cookies.

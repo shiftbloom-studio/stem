@@ -11,12 +11,23 @@ export function parseFrom(raw: string): { email: string; name: string } | string
   return raw.trim();
 }
 
+/** Local development: STEM_URL points at this machine. */
+export function isLocal(env: Pick<Env, "STEM_URL">): boolean {
+  try {
+    return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(env.STEM_URL).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function sendMail(env: Env, mail: Mail): Promise<void> {
-  if (env.DEV_LOG_EMAIL === "true" || !env.EMAIL || !env.EMAIL_FROM) {
+  if (isLocal(env) && (env.DEV_LOG_EMAIL === "true" || !env.EMAIL || !env.EMAIL_FROM)) {
     // Local development only: the code shows up in `wrangler dev` output.
     console.log(`[mail] to=${mail.to} subject=${JSON.stringify(mail.subject)}\n${mail.text}`);
     return;
   }
+  // Anywhere else, codes never go to the logs: a deployment without email fails loudly instead.
+  if (!env.EMAIL || !env.EMAIL_FROM) throw new Error("email is not configured: set the EMAIL binding and EMAIL_FROM");
   await env.EMAIL.send({ from: parseFrom(env.EMAIL_FROM), to: mail.to, subject: mail.subject, text: mail.text, html: mail.html });
 }
 

@@ -9,7 +9,7 @@ It runs at [stem.shiftbloom.studio](https://stem.shiftbloom.studio) on a single 
 ## What it does
 
 - **Passwordless sign-in.** Passkeys first, codes by email as the fallback. The first confirmed code creates the account. After that, stem offers to add a passkey once.
-- **Accounts people can manage.** Change your name, add and remove passkeys, see every signed-in device and end any of them, delete your account.
+- **Accounts people can manage.** Change your name, add and remove passkeys, see every signed-in device and end any of them, see which apps have access and remove them, download your data as JSON, delete your account.
 - **Teams per app.** Organizations belong to one app. Members have a role (`owner`, `admin`, `member`, plus any roles the operator adds, like `dispatcher` or `pilot`). Invitations go out by email and are accepted on stem.
 - **OpenID Connect for apps.** Authorization code flow with PKCE, rotating refresh tokens, RP-initiated logout, discovery and JWKS. Access tokens are EdDSA-signed JWTs for the app's API (RFC 8707 resource indicators) and carry an `orgs` claim with the person's teams in that app.
 - **A directory API for app servers.** Invitations, members, roles and team details, authorized with the app's own client credentials. An app only ever sees its own teams.
@@ -27,7 +27,9 @@ How an app plugs in is described in [docs/integration.md](docs/integration.md).
 - Pages ship without inline scripts under a strict Content Security Policy, with `frame-ancestors 'none'`, HSTS and no third-party requests (fonts are proxied).
 - `workers.dev` and preview URLs are off, so stem only answers on its issuer origin.
 - Organizations are changed only by their app through the directory API. Members can list their teams and answer invitations, nothing more.
-- Tokens come only from the OpenID Connect endpoints; Better Auth's session-to-JWT endpoint is off.
+- Tokens come only from the OpenID Connect endpoints; Better Auth's session-to-JWT endpoint is off, and so are its password, email-change and social endpoints.
+- Cookie requests must carry stem's own `Origin`, always (Better Auth would skip this check when `NODE_ENV` says `test`).
+- Sign-in codes never reach the logs outside `localhost`. Without the email binding, sending fails.
 - The signing key (Ed25519) rotates every 90 days; old keys stay published for 30 more days. Private keys are encrypted at rest with `BETTER_AUTH_SECRET`.
 
 ### If a signing key leaks
@@ -35,7 +37,8 @@ How an app plugs in is described in [docs/integration.md](docs/integration.md).
 Delete the keys and let stem make a new one on the next request. Every token signed so far stops verifying, so people sign in to apps again:
 
 ```sh
-npx wrangler d1 execute stem-db --remote --command "DELETE FROM jwks"
+node scripts/render-config.mjs   # with your .env.deploy
+npx wrangler d1 execute stem-db --remote -c wrangler.deploy.jsonc --command "DELETE FROM jwks"
 ```
 
 If `BETTER_AUTH_SECRET` leaks, replace it too (`npx wrangler secret put BETTER_AUTH_SECRET`). That also ends every stem session.
@@ -55,30 +58,43 @@ Please report security problems as described in [SECURITY.md](SECURITY.md).
 
 Storage is one D1 database. Email goes out through Cloudflare Email Service.
 
+## Privacy
+
+stem stores what signing in needs and deletes the rest. A daily cron (`src/cleanup.ts`) removes expired sessions, code hashes a day after they expire, per-IP and per-address counters, expired app tokens, invitations 90 days after they expire, and unconfirmed accounts that belong to no team after 30 days. People can download everything stem holds about them from their account page, remove an app's access, and delete their account. The privacy policy in `src/ui/legal.ts` (English and German) describes exactly this; if you change a period, change both.
+
 ## Self-hosting
 
 You need a Cloudflare account with Workers Paid, a zone for the hostname, and a domain onboarded to Email Sending.
 
+`wrangler.jsonc` is a template. Your hostname, database id, sender and keys never go into it: `scripts/render-config.mjs` fills its `<PLACEHOLDERS>` from environment variables (or a local `.env.deploy`) and writes `wrangler.deploy.jsonc`, which isn't committed.
+
 ```sh
 npm install
-npx wrangler d1 create stem-db              # put the id into wrangler.jsonc
-npx wrangler d1 migrations apply stem-db --remote
+npx wrangler d1 create stem-db              # note the database id
+cp .env.deploy.example .env.deploy          # fill in hostname, database id, sender
+npm run db:migrate                          # applies migrations/ to the remote database
 npx wrangler secret put BETTER_AUTH_SECRET  # 32+ random bytes
 npx wrangler secret put OPERATOR_TOKEN      # 32+ random bytes
 npx wrangler secret put TURNSTILE_SECRET    # optional, with TURNSTILE_SITE_KEY
 npm run deploy
 ```
 
-Then set the variables in `wrangler.jsonc` (or in your deploy pipeline):
+Deploy settings (`.env.deploy`, or build variables in Workers Builds):
 
-| Variable | Meaning |
+| Setting | Meaning |
 | --- | --- |
-| `STEM_URL` | Public origin, also the OpenID Connect issuer. |
-| `EMAIL_FROM` | Sender for codes and invitations, on a domain onboarded to Email Sending. |
-| `ORG_ROLES` | Extra team roles, comma separated. |
-| `RESOURCES` | APIs that get JWT access tokens, comma separated absolute URIs. |
-| `TURNSTILE_SITE_KEY` | Turnstile widget for "email me a code". Needs the `TURNSTILE_SECRET` secret. |
-| `LEGAL` | Operator details (JSON) for `/privacy`, `/datenschutz`, `/imprint` and `/impressum`. The pages are hidden without it. Keep it out of the repository. |
+| `STEM_HOSTNAME` | Hostname stem answers on. `https://` plus this is the OpenID Connect issuer. |
+| `STEM_D1_DATABASE_ID` | Id of the `stem-db` D1 database. |
+| `EMAIL_FROM` | Sender for codes and invitations, on a domain onboarded to Email Sending, e.g. `stem <login@example.com>`. |
+| `ORG_ROLES` | Optional. Extra team roles, comma separated. |
+| `RESOURCES` | Optional. APIs that get JWT access tokens, comma separated absolute URIs. |
+| `TURNSTILE_SITE_KEY` | Optional. Turnstile widget for "email me a code". Needs the `TURNSTILE_SECRET` secret. |
+
+Set `LEGAL` (operator details as JSON, see the comment in `wrangler.jsonc`) as a variable in the Cloudflare dashboard. It fills `/privacy`, `/datenschutz`, `/imprint` and `/impressum`; without it those pages are hidden. `keep_vars` keeps it across deploys.
+
+With [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/), connect the repository, use `npm ci` as the build command and `npm run deploy` as the deploy command, and add the settings above as build variables.
+
+If you fork, point `SOURCE_URL` in `src/ui/layout.ts` at your repository (AGPL-3.0 section 13).
 
 Register an app and create its first team with the operator API, as shown in [docs/integration.md](docs/integration.md).
 
@@ -86,7 +102,7 @@ Register an app and create its first team with the operator API, as shown in [do
 
 ```sh
 cp .dev.vars.example .dev.vars
-npx wrangler d1 migrations apply stem-db --local
+npm run db:migrate:local
 npm run dev          # codes are printed to the console
 npm run check        # typecheck, tests, bundle
 ```
@@ -95,7 +111,7 @@ Node 26 or newer.
 
 ## Design
 
-The pages follow the shiftbloom studio brand book: white paper and ink, Bloom Red `#FF2E52` as the only accent, the Bloom mark drawn as SVG, Clash Display for statements, General Sans for the interface and JetBrains Mono for labels and codes. When you fork, restyle `src/ui/layout.ts`.
+The pages follow the shiftbloom studio brand book: warm off-white paper and ink, Bloom Red `#FF2E52` as the only accent, the Bloom mark drawn as SVG, Clash Display for statements, General Sans for the interface and JetBrains Mono for labels and codes. When you fork, restyle `src/ui/layout.ts`.
 
 ## Costs
 
