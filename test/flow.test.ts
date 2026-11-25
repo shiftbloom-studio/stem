@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { createLocalJWKSet, jwtVerify, decodeJwt, type JSONWebKeySet } from "jose";
 import app from "../src/index";
+import { UNUSED_PATHS } from "../src/auth";
 import type { Env } from "../src/env";
 
 const ORIGIN = "https://stem.test";
@@ -177,6 +178,18 @@ describe("stem", () => {
 
   it("doesn't hand out session JWTs", async () => {
     expect((await browser.fetch("/api/auth/token")).status).toBe(404);
+  });
+
+  it("switches off password, email-change and social endpoints", async () => {
+    const before = sent.length;
+    for (const path of UNUSED_PATHS) {
+      const r = await new Browser(env, "198.51.102.1").json(`/api/auth${path}`, { email: "owner@example.com", newEmail: "new@example.com", otp: "123456", password: "a-long-password-1", provider: "github" });
+      expect(r.status, path).toBe(404);
+    }
+    // Password-reset codes would skip the bot check and the per-address limits.
+    const r = await new Browser(env, "198.51.102.2").json("/api/auth/email-otp/send-verification-otp", { email: "owner@example.com", type: "forget-password" });
+    expect(r.status).toBe(400);
+    expect(sent.length).toBe(before);
   });
 
   it("rejects a wrong code", async () => {

@@ -3,7 +3,7 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
-  /** Cloudflare Email Sending. Without it, codes and invitations are only logged (local development). */
+  /** Cloudflare Email Sending. Without it, codes are only logged on localhost and sending fails elsewhere. */
   EMAIL?: SendEmail;
   /** Per IP and minute: sign-in attempts (codes, passkeys). */
   AUTH_RL?: RateLimit;
@@ -27,6 +27,6 @@ export interface Env {
   RESOURCES?: string;
   /** Operator details for the imprint and privacy policy, as JSON. Legal pages are hidden when unset. */
   LEGAL?: string;
-  /** "true" logs sign-in codes to the console instead of sending them. Never set this in production. */
+  /** "true" logs sign-in codes to the console instead of sending them. Only honored when STEM_URL is localhost. */
   DEV_LOG_EMAIL?: string;
 }

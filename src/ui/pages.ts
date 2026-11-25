@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { bloomSvg } from "../bloom";
 import { esc } from "./html";
-import { page } from "./layout";
+import { page, SOURCE_URL } from "./layout";
 
 export type Ui = { legal: boolean; turnstileSiteKey: string | null; origin: string };
 
@@ -18,7 +18,7 @@ export function landingPage(ui: Ui) {
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:28px">
       <a class="btn" href="/account" data-when="in" hidden>Your account</a>
       <a class="btn" href="/sign-in" data-when="out">Sign in</a>
-      <a class="btn ghost" href="https://github.com/shiftbloom-studio/stem">How it works</a>
+      <a class="btn ghost" href="${SOURCE_URL}">How it works</a>
     </div>
   </div>
   <div class="art" aria-hidden="true">${bloomSvg({ size: 220, id: "hero" })}</div>

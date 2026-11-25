@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { getMigrations } from "better-auth/db/migration";
 import { safeNext, parseLegal, robotsTxt } from "../src/util";
-import { parseFrom } from "../src/email";
+import { parseFrom, sendMail, isLocal } from "../src/email";
 import { roleNames, isRole } from "../src/roles";
 import { createAuth } from "../src/auth";
 
@@ -15,6 +15,24 @@ describe("safeNext", () => {
 describe("parseFrom", () => {
   it("splits name and address", () => expect(parseFrom("stem <login@example.com>")).toEqual({ name: "stem", email: "login@example.com" }));
   it("takes a bare address", () => expect(parseFrom("login@example.com")).toBe("login@example.com"));
+});
+
+describe("sendMail", () => {
+  const mail = { to: "a@example.com", subject: "123456 is your stem code", text: "123456", html: "" };
+  it("knows local development", () => {
+    expect(isLocal({ STEM_URL: "http://localhost:8787" })).toBe(true);
+    expect(isLocal({ STEM_URL: "https://stem.example.com" })).toBe(false);
+  });
+  it("never logs codes outside localhost", async () => {
+    await expect(sendMail({ STEM_URL: "https://stem.example.com", DEV_LOG_EMAIL: "true" } as never, mail)).rejects.toThrow(/not configured/);
+    await expect(sendMail({ STEM_URL: "http://localhost:8787" } as never, mail)).resolves.toBeUndefined();
+  });
+  it("ignores DEV_LOG_EMAIL in production", async () => {
+    const out: unknown[] = [];
+    const env = { STEM_URL: "https://stem.example.com", DEV_LOG_EMAIL: "true", EMAIL_FROM: "stem <login@example.com>", EMAIL: { send: async (m: unknown) => void out.push(m) } };
+    await sendMail(env as never, mail);
+    expect(out).toHaveLength(1);
+  });
 });
 
 describe("roles", () => {

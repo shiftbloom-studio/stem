@@ -30,9 +30,14 @@ const asJson = (v: unknown): Record<string, unknown> => {
 };
 const iso = (d: unknown) => (d instanceof Date ? d.toISOString() : d ? new Date(d as string).toISOString() : null);
 
+const MAX_BODY = 32768;
 async function body<T>(c: C): Promise<T | null> {
-  if (Number(c.req.header("content-length") || 0) > 32768) return null;
-  try { return (await c.req.json()) as T; } catch { return null; }
+  if (Number(c.req.header("content-length") || 0) > MAX_BODY) return null;
+  try {
+    // A body without content-length (chunked) is measured after reading.
+    const text = await c.req.text();
+    return text.length > MAX_BODY ? null : (JSON.parse(text) as T);
+  } catch { return null; }
 }
 
 type Org = { id: string; name: string; slug: string; logo?: string | null; metadata?: unknown; app?: string | null; createdAt: Date };
