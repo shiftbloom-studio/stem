@@ -312,6 +312,7 @@ async function account() {
     const ul = $("sessions"); if (!ul) return;
     ul.replaceChildren();
     const res = await client.listSessions();
+    if (res.error || !Array.isArray(res.data) || !res.data.length) { ul.append(li("This browser", res.error ? "We couldn't load your other sessions. Reload the page to try again." : `Since ${fmt(session.createdAt)}`)); return; }
     for (const x of (res.data || []) as { token: string; id: string; userAgent?: string | null; ipAddress?: string | null; createdAt: string | Date }[]) {
       const current = x.id === session.id;
       ul.append(li(`${browserOf(x.userAgent)}${current ? " (this one)" : ""}`, `Since ${fmt(x.createdAt)}${x.ipAddress ? ` · ${x.ipAddress}` : ""}`, current ? undefined : {
