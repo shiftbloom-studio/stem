@@ -141,7 +141,7 @@ function path(p){p=(p||"/").replace(/\\/+$/,"")||"/";return KEEP.test(p)?p:"/[pr
 function clean(v){if(typeof v!=="string"||!/^https?:/.test(v))return v;try{var u=new URL(v,location.origin);if(u.origin!==location.origin)return u.origin;return u.origin+path(u.pathname)}catch(e){return null}}
 var URLS=["$external_click_url","$current_url","$referrer","$initial_referrer","$initial_current_url","$session_entry_url","$prev_pageview_url","$session_entry_referrer"];
 var PATHS=["$pathname","$initial_pathname","$session_entry_pathname","$prev_pageview_pathname"];
-function mask(t){return typeof t!=="string"?t:t.replace(/"[^"]*"|'[^']*'|\\x60[^\\x60]*\\x60/g,'"[masked]"').replace(/\\b[a-z][a-z0-9+.-]*:\\/\\/\\S+/gi,"[url]").replace(/[A-Za-z0-9_-]{16,}/g,"[masked]").slice(0,500)}
+function mask(t){return typeof t!=="string"?t:t.replace(/"[^"]*"|'[^']*'|\\x60[^\\x60]*\\x60/g,'"[masked]"').replace(/\\b[a-z][a-z0-9+.-]*:\\/\\/\\S+/gi,"[url]").replace(/[\\w.+-]{1,64}@[\\w-]{1,63}(?:\\.[\\w-]{1,63}){1,8}/g,"[email]").replace(/[A-Za-z0-9_-]{16,}/g,"[masked]").slice(0,500)}
 var ATTR=/^attr__(id|class|data-ph.*)$/;
 function scrub(ev){if(!ev||!ev.properties)return ev;var p=ev.properties,i,k;for(i=0;i<URLS.length;i++)if(URLS[i] in p)p[URLS[i]]=clean(p[URLS[i]]);for(i=0;i<PATHS.length;i++)if(typeof p[PATHS[i]]==="string")p[PATHS[i]]=path(p[PATHS[i]]);
 if(typeof p.$elements_chain==="string")p.$elements_chain=p.$elements_chain.replace(/attr__(?!id=|class=|data-ph)[\\w-]+="(?:[^"\\\\]|\\\\.)*"/g,"").replace(/href="(?:[^"\\\\]|\\\\.)*"/g,'href="[private]"');
@@ -192,6 +192,8 @@ export const scrubText = (s: string) =>
     // quoted parts: V8 quotes the input in JSON.parse errors, which may be a paste or a URL to shorten
     .replace(/"[^"]*"|'[^']*'|`[^`]*`/g, '"[masked]"')
     .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, "[url]")
+    // an email address in an error (a duplicate account, a failed send) must not reach PostHog
+    .replace(/[\w.+-]{1,64}@[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}/g, "[email]")
     .replace(/[A-Za-z0-9_-]{16,}/g, "[masked]")
     // item ids and codes are short: mask every word that mixes letters and digits
     .replace(/[A-Za-z0-9_-]{6,}/g, (w) => (/\d/.test(w) && /[A-Za-z]/.test(w) ? "[masked]" : w))
