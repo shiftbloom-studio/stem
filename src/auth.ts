@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Better Auth instance behind stem. One instance per isolate and environment.
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware, APIError } from "better-auth/api";
+import { createAuthMiddleware, APIError, getSessionFromCtx } from "better-auth/api";
 import { emailLimits, CODE_LIFETIME_MS } from "./limits";
 import { accountTools } from "./account";
 import { emailOTP, organization, jwt, captcha } from "better-auth/plugins";
@@ -135,6 +135,14 @@ export function createAuth(env: Env, exec?: Exec) {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path.startsWith("/organization/") && !USER_ORG_PATHS.has(ctx.path)) throw new APIError("NOT_FOUND");
         if (ctx.path === "/email-otp/send-verification-otp" && !OTP_TYPES.has(String(ctx.body?.type))) throw new APIError("BAD_REQUEST", { code: "INVALID_OTP_TYPE", message: "Invalid code type." });
+        // Password managers show a passkey under its WebAuthn user.name. Make that the email address, so
+        // the passkey reads "you@example.com" there. The `name` the client sends stays the passkey's label
+        // on the account page (verify-registration stores the body's name, not this one).
+        if (ctx.path === "/passkey/generate-register-options") {
+          const s = await getSessionFromCtx(ctx);
+          if (s?.user.email) return { context: { query: { ...(ctx.query || {}), name: s.user.email } } };
+          return;
+        }
         if (ctx.path !== "/admin/oauth2/create-client" || !isOperator(env, ctx.headers)) return;
         const now = new Date();
         ctx.context.session = {

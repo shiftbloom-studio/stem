@@ -179,6 +179,20 @@ describe("stem", () => {
     expect(((await list.json()) as { slug: string }[]).map((o) => o.slug)).toEqual(["va"]);
   });
 
+  it("offers passkey autofill on the sign-in page", async () => {
+    const html = await (await new Browser(env, "203.0.113.69").fetch("/sign-in")).text();
+    expect(html).toMatch(/id="email"[^>]*autocomplete="username webauthn"/);
+  });
+
+  it("names new passkeys after the email address in password managers", async () => {
+    const r = await browser.fetch("/api/auth/passkey/generate-register-options?name=" + encodeURIComponent("Mac, added 26 Nov 2026"));
+    expect(r.status).toBe(200);
+    const opts = (await r.json()) as { user: { name: string } };
+    expect(opts.user.name).toBe("owner@example.com");
+    // Signed out, there is nobody to register a passkey for.
+    expect((await new Browser(env, "203.0.113.70").fetch("/api/auth/passkey/generate-register-options")).status).toBe(401);
+  });
+
   it("doesn't hand out session JWTs", async () => {
     expect((await browser.fetch("/api/auth/token")).status).toBe(404);
   });
