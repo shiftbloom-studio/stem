@@ -116,6 +116,10 @@ If you fork, point `SOURCE_URL` in `src/ui/layout.ts` at your repository (AGPL-3
 
 Register an app and create its first team with the operator API, as shown in [docs/integration.md](docs/integration.md).
 
+### Usage statistics (optional)
+
+With the `POSTHOG_KEY` secret (a PostHog project token, `phc_...`), the Worker sends anonymous counts to [PostHog](https://posthog.com): codes sent, sign-ins by method, passkeys added or removed, consent answers, finished app sign-ins by OAuth client id, mandate answers, deleted accounts, cleanup counts and Worker errors. Events have no user id, email, name, IP address, code or token, and each gets a random `distinct_id`. stem's pages load no analytics script. `POSTHOG_HOST` overrides the default `https://us.i.posthog.com`. With the secret set, the privacy policy gets a "Usage statistics" section. See `src/analytics.ts`.
+
 ### Deploy with Workers Builds
 
 stem.shiftbloom.studio deploys with [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) on every push to `main`, and no API token is stored on GitHub. Connect the repository to the Worker in the Cloudflare dashboard (Settings > Build), use `npm ci` as the build command and `npm run deploy` as the deploy command, and add the settings above as build variables. The build picks up Node 26 from `.node-version`.

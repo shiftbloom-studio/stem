@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-export interface Env {
+import type { PostHogEnv } from "./posthog";
+
+/** POSTHOG_KEY (secret) and POSTHOG_HOST: anonymous usage counts and error tracking, see src/analytics.ts. */
+export interface Env extends PostHogEnv {
   DB: D1Database;
   ASSETS: Fetcher;
   /** Cloudflare Email Sending. Without it, codes are only logged on localhost and sending fails elsewhere. */

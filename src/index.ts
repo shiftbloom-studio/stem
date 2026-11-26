@@ -21,6 +21,7 @@ import { passRoutes, directory, passOrigins, DIRECTORY_PATH } from "./passes/rou
 import { cleanupPasses } from "./passes/issuer";
 import { sealedEnabled } from "./sealed";
 import { passkeyNoticeEnabled } from "./passkey-notice";
+import { phCapture, phException, phKey } from "./posthog";
 
 const TURNSTILE = "https://challenges.cloudflare.com";
 const CSP = [
@@ -114,7 +115,7 @@ for (const [path, kind] of Object.entries(LEGAL_PATHS)) {
   app.get(path, (c) => {
     const legal = parseLegal(c.env.LEGAL);
     if (!legal) return html(messagePage(ui(c.env), "Not here", "This page doesn't exist."), 404);
-    return html(legalPage(kind, legal, { turnstile: !!ui(c.env).turnstileSiteKey, sealed: sealedEnabled(c.env), passkeyNotice: passkeyNoticeEnabled(c.env) }), 200, "public, max-age=3600");
+    return html(legalPage(kind, legal, { turnstile: !!ui(c.env).turnstileSiteKey, sealed: sealedEnabled(c.env), passkeyNotice: passkeyNoticeEnabled(c.env), analytics: !!phKey(c.env) }), 200, "public, max-age=3600");
   });
 }
 
@@ -233,9 +234,13 @@ app.post("/api/mandates/authorize", async (c) => {
   return c.json(r, r.allowed ? 200 : r.reason === "invalid_request" ? 400 : 403);
 });
 
+/** The route without ids, for error reports: /invite/<id> becomes /invite/:id. */
+const routeOf = (p: string) => p.replace(/\/[0-9a-f-]{36}(?=\/|$)/gi, "/:id").replace(/\/[A-Za-z0-9_-]{20,}(?=\/|$)/g, "/:id").slice(0, 120);
+
 app.notFound((c) => html(messagePage(ui(c.env), "Not here", "This page doesn't exist. Maybe the link is old or has a typo."), 404));
 app.onError((e, c) => {
   console.error("[stem] unhandled", e);
+  phException(c.env, c.executionCtx as never, e, { path: routeOf(c.req.path) });
   return c.req.path.startsWith("/api/") ? c.json({ error: "server_error" }, 500) : html(messagePage(ui(c.env), "Something broke", "That's on us. Try again in a moment.", "error"), 500);
 });
 
@@ -244,8 +249,13 @@ async function scheduled(_event: ScheduledController, env: Env, ctx: ExecutionCo
   ctx.waitUntil(
     (async () => {
       const db = (await createAuth(env, ctx).$context).adapter;
-      console.log("[stem] cleanup", JSON.stringify({ ...(await cleanup(db as never)), ...(await cleanupPasses(env)) }));
-    })().catch((e) => console.error("[stem] cleanup failed", e)),
+      const counts = { ...(await cleanup(db as never)), ...(await cleanupPasses(env)) };
+      console.log("[stem] cleanup", JSON.stringify(counts));
+      await phCapture(env, null, "cleanup_ran", counts);
+    })().catch((e) => {
+      console.error("[stem] cleanup failed", e);
+      return phException(env, null, e, { job: "cleanup" });
+    }),
   );
 }
 
