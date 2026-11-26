@@ -38,23 +38,31 @@ export function landingPage(ui: Ui) {
   );
 }
 
+/** Set when an app asks a signed-in person who has a passkey to prove it's them again (step-up). */
+export type StepUp = { email: string };
+
 /** `clientName` is set when an app sent the person here to sign in. */
-export function signInPage(ui: Ui, clientName: string | null) {
+export function signInPage(ui: Ui, clientName: string | null, stepUp: StepUp | null = null) {
   const target = clientName ? `Sign in to continue to <strong>${esc(clientName)}</strong>.` : "Sign in to your stem account.";
+  const intro = stepUp
+    ? `<span class="label">confirm it's you</span>
+    <h1 style="margin-top:14px">One more check<em>.</em></h1>
+    <p class="lead">${clientName ? `<strong>${esc(clientName)}</strong> wants` : "We want"} to make sure it's still you before you go on. Use your passkey, or get a code by email if it isn't at hand.</p>`
+    : `<span class="label">sign in</span>
+    <h1 style="margin-top:14px">Welcome back<em>.</em></h1>
+    <p class="lead">${target} New here? Same steps: the first code you confirm creates your account.</p>`;
   return page(
-    { title: "Sign in · stem.", page: "sign-in", legal: ui.legal, turnstile: !!ui.turnstileSiteKey },
+    { title: stepUp ? "Confirm it's you · stem." : "Sign in · stem.", page: "sign-in", legal: ui.legal, turnstile: !!ui.turnstileSiteKey },
     `<section class="split">
   <div>
-    <span class="label">sign in</span>
-    <h1 style="margin-top:14px">Welcome back<em>.</em></h1>
-    <p class="lead">${target} New here? Same steps: the first code you confirm creates your account.</p>
+    ${intro}
   </div>
   <div class="panel">
     <div class="stack" id="step-start">
-      <button class="btn wide" type="button" id="passkey-btn" hidden>Sign in with a passkey</button>
+      <button class="btn wide" type="button" id="passkey-btn"${stepUp ? " data-step-up" : ""} hidden>${stepUp ? "Confirm with your passkey" : "Sign in with a passkey"}</button>
       <div class="or" id="passkey-or" hidden>or</div>
       <form class="stack" id="email-form" novalidate>
-        <label class="f">Email address<input type="email" name="email" id="email" required autocomplete="username webauthn" inputmode="email" maxlength="254" placeholder="you@example.com"></label>
+        <label class="f">Email address<input type="email" name="email" id="email" required autocomplete="username webauthn" inputmode="email" maxlength="254" placeholder="you@example.com"${stepUp ? ` value="${esc(stepUp.email)}"` : ""}></label>
         ${ui.turnstileSiteKey ? `<div class="cf-turnstile" data-sitekey="${esc(ui.turnstileSiteKey)}" data-action="send-code" data-theme="light" data-size="flexible"></div>` : ""}
         <button class="btn wide" type="submit">Email me a code</button>
       </form>

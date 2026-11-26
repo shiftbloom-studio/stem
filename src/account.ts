@@ -83,7 +83,7 @@ export async function exportData(db: Db, user: { id: string; email: string }) {
     account: { id: u?.id, email: u?.email, name: u?.name || null, email_verified: !!u?.emailVerified, created_at: iso(u?.createdAt), updated_at: iso(u?.updatedAt) },
     sign_in_methods: accounts.map((a) => ({ provider: a.providerId, created_at: iso(a.createdAt) })),
     passkeys: passkeys.map((p) => ({ id: p.id, name: p.name || null, device_type: p.deviceType, synced: !!p.backedUp, authenticator_aaguid: p.aaguid || null, transports: p.transports || null, created_at: iso(p.createdAt) })),
-    sessions: sessions.map((s) => ({ created_at: iso(s.createdAt), updated_at: iso(s.updatedAt), expires_at: iso(s.expiresAt), ip_address: s.ipAddress || null, user_agent: s.userAgent || null })),
+    sessions: sessions.map((s) => ({ created_at: iso(s.createdAt), updated_at: iso(s.updatedAt), expires_at: iso(s.expiresAt), ip_address: s.ipAddress || null, user_agent: s.userAgent || null, sign_in_method: s.authMethod || null })),
     teams: members.map((m) => ({ organization: org(m.organizationId), role: m.role, joined_at: iso(m.createdAt) })),
     invitations: invitations.map((i) => ({ organization: org(i.organizationId), role: i.role || null, status: i.status, created_at: iso(i.createdAt), expires_at: iso(i.expiresAt) })),
     apps,

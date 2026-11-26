@@ -158,6 +158,8 @@ function signIn() {
 
   const pkBtn = $<HTMLButtonElement>("passkey-btn");
   if (passkeysSupported()) { show(pkBtn); show($("passkey-or")); }
+  // An app asked for a fresh passkey: put it under the person's finger. Browsers need a tap to start it.
+  if (passkeysSupported() && pkBtn?.dataset.stepUp !== undefined) pkBtn.focus();
   pkBtn?.addEventListener("click", () => busy(pkBtn, async () => {
     fail(null);
     const res = (await client.signIn.passkey({ returnWebAuthnResponse: true })) as unknown as PasskeySignIn;

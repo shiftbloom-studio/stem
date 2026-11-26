@@ -12,6 +12,7 @@ import { accessControl } from "./roles";
 import { sendMail, codeMail, inviteMail } from "./email";
 import { orgClaims, type ClaimsAdapter } from "./claims";
 import { timingSafeEqual } from "./util";
+import { authStrength, strengthClaims } from "./strength";
 
 /** Scopes clients may ask for. `orgs` adds the user's organizations in the client's app to the access token. */
 export const SCOPES: string[] = ["openid", "profile", "email", "offline_access", "orgs"];
@@ -157,6 +158,7 @@ export function createAuth(env: Env, exec?: Exec) {
         : []),
       emailLimits(),
       accountTools(),
+      authStrength(),
       emailOTP({
         otpLength: 6,
         expiresIn: CODE_LIFETIME_MS / 1000,
@@ -216,6 +218,16 @@ export function createAuth(env: Env, exec?: Exec) {
         // Only the operator registers clients; signed-in users can't.
         clientPrivileges: ({ headers }) => isOperator(env, headers),
         clientReference: () => "operator",
+        // How the person signed in (passkey or email code) and when, on every token issued for a session.
+        // Apps that don't read these claims see no change. See "Sign-in strength" in docs/integration.md.
+        extensions: [
+          {
+            claims: {
+              accessToken: async ({ user, sessionId }) => (user ? { ...(await strengthClaims((await adapter()) as never, sessionId)) } : {}),
+              idToken: async ({ sessionId }) => ({ ...(await strengthClaims((await adapter()) as never, sessionId)) }),
+            },
+          },
+        ],
         async customAccessTokenClaims({ user, scopes, metadata }) {
           if (!user) return {};
           const claims: Record<string, unknown> = {};
