@@ -27,7 +27,9 @@
     // Turnstile on "email me a code" (also set the TURNSTILE_SECRET secret).
     "TURNSTILE_SITE_KEY": "<TURNSTILE_SITE_KEY?>",
     // Apps that take mandates, as JSON (docs/mandates.md). Empty turns mandates off.
-    "MANDATE_APPS": "<MANDATE_APPS?>"
+    "MANDATE_APPS": "<MANDATE_APPS?>",
+    // App pages that may fetch passes (anonymous quota tokens) for signed-in people, comma separated origins.
+    "PASS_ORIGINS": "<PASS_ORIGINS?>"
     // Optional: operator details for /imprint, /impressum, /privacy and /datenschutz (hidden when unset).
     // Set it in the dashboard or your deploy pipeline rather than committing it.
     // "LEGAL": "{\"name\":\"Jane Doe\",\"street\":\"Example St 1\",\"city\":\"12345 Town\",\"country\":{\"en\":\"Germany\",\"de\":\"Deutschland\"},\"email\":\"jane@example.com\",\"authority\":\"Your data protection authority, address\"}"

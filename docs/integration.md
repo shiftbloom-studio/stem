@@ -170,6 +170,10 @@ A plain service binding without `entrypoint` keeps working exactly as before.
 
 Agents that act for a person (upload to an app, call its API) can carry a mandate the person signed with a passkey instead of a static API key. How apps check them is in [mandates.md](mandates.md).
 
+## 7. Passes: an allowance without accounts
+
+An app can give signed-in people more (free conversions, uploads, requests) without learning who they are, through anonymous passes stem issues. How to accept them is in [passes.md](passes.md).
+
 ## Things to know
 
 - `sub` is the same for a person across all apps on one stem. Don't treat it as a secret.

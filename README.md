@@ -17,6 +17,7 @@ It runs on a single Cloudflare Worker.
 - **Teams per app.** Organizations belong to one app. Members have a role (`owner`, `admin`, `member`, plus any roles the operator adds, like `dispatcher` or `pilot`). Invitations go out by email and are accepted on stem.
 - **OpenID Connect for apps.** Authorization code flow with PKCE, rotating refresh tokens, RP-initiated logout, discovery and JWKS. Access tokens are EdDSA-signed JWTs for the app's API (RFC 8707 resource indicators) and carry an `orgs` claim with the person's teams in that app, plus how they signed in (`auth_method`), so an app can ask for a fresh passkey before admin actions.
 - **Mandates for agents.** Your passkey signs the exact rights an agent gets. The agent hands narrower copies to sub-agents without calling stem, apps check the whole chain back to your signature, and one stop button on your account page ends every branch. See [docs/mandates.md](docs/mandates.md).
+- **Passes: quotas without accounts.** stem is a [Privacy Pass](https://www.rfc-editor.org/rfc/rfc9578) issuer. A signed-in browser collects blinded passes (50 a day by default) and spends one per request at an app. The app checks stem's signature and learns nothing about who it is; stem learns how many passes an account took and nothing about where they went. See [docs/passes.md](docs/passes.md).
 - **A directory API for app servers.** Invitations, members, roles and team details, authorized with the app's own client credentials. An app only ever sees its own teams.
 
 How an app plugs in is described in [docs/integration.md](docs/integration.md).
@@ -55,6 +56,7 @@ If `BETTER_AUTH_SECRET` leaks, replace it too (`npx wrangler secret put BETTER_A
 | `src/auth.ts` | The [Better Auth](https://www.better-auth.com) instance (pinned): email codes, passkeys, organizations, JWT/JWKS and the OAuth provider. |
 | `src/api.ts` | Operator API (`/api/v1/operator/*`) and the per-app directory API (`/api/v1/*`). |
 | `src/index.ts` | Hono app: pages, discovery, security headers, rate limits. |
+| `src/passes/` | Privacy Pass issuer: daily blind-RSA keys, the issuer directory, the per-account daily allowance. |
 | `src/ui/` | Server-rendered pages and the privacy policy and imprint in English and German. |
 | `src/mandates/` | Mandates: the `mandates()` plugin, the verifier apps run, the `Mandate` Durable Object and the `MandateGateway` entrypoint. |
 | `src/client/app.ts` | Browser code for the pages, bundled to `public/assets/app.js`. |

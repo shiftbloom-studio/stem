@@ -31,6 +31,10 @@ export interface Env {
   MANDATE?: DurableObjectNamespace<import("./mandates/object").Mandate>;
   /** Apps that take mandates and their actions, as JSON. See docs/mandates.md. Unset means mandates are off. */
   MANDATE_APPS?: string;
+  /** Origins of app pages that may fetch passes for signed-in people, comma separated (e.g. "https://convert.example.com"). */
+  PASS_ORIGINS?: string;
+  /** Passes per account and UTC day. Default 50. */
+  PASSES_PER_DAY?: string;
   /** "true" logs sign-in codes to the console instead of sending them. Only honored when STEM_URL is localhost. */
   DEV_LOG_EMAIL?: string;
 }

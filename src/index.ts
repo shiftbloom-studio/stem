@@ -17,6 +17,8 @@ import { Mandate } from "./mandates/object";
 import { MandateGatewayBase, authorize } from "./mandates/authorize";
 import { approvePage, answeredPage } from "./mandates/page";
 import { mandateApps, mandatesEnabled, type RequestRow, type RequestTerms } from "./mandates/plugin";
+import { passRoutes, directory, passOrigins, DIRECTORY_PATH } from "./passes/routes";
+import { cleanupPasses } from "./passes/issuer";
 
 const TURNSTILE = "https://challenges.cloudflare.com";
 const CSP = [
@@ -92,6 +94,19 @@ app.on(["GET", "POST"], "/api/auth/*", async (c) => {
 });
 
 app.route("/api/v1", apiRoutes());
+
+// Passes (src/passes): the issuer directory for apps, and issuing for browsers on app pages.
+app.get(DIRECTORY_PATH, (c) => directory(c.env));
+app.route("/api/passes", passRoutes());
+/** Back to the app page that sent someone to sign in for passes. Only origins in PASS_ORIGINS. */
+app.get("/passes/back", (c) => {
+  const to = c.req.query("to") || "";
+  try {
+    const u = new URL(to);
+    if (u.origin !== new URL(c.env.STEM_URL).origin && passOrigins(c.env).has(u.origin)) return c.redirect(u.toString(), 302);
+  } catch {}
+  return c.redirect("/account", 302);
+});
 
 for (const [path, kind] of Object.entries(LEGAL_PATHS)) {
   app.get(path, (c) => {
@@ -227,7 +242,7 @@ async function scheduled(_event: ScheduledController, env: Env, ctx: ExecutionCo
   ctx.waitUntil(
     (async () => {
       const db = (await createAuth(env, ctx).$context).adapter;
-      console.log("[stem] cleanup", JSON.stringify(await cleanup(db as never)));
+      console.log("[stem] cleanup", JSON.stringify({ ...(await cleanup(db as never)), ...(await cleanupPasses(env)) }));
     })().catch((e) => console.error("[stem] cleanup failed", e)),
   );
 }
