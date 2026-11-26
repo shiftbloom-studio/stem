@@ -14,6 +14,7 @@ import { orgClaims, type ClaimsAdapter } from "./claims";
 import { timingSafeEqual } from "./util";
 import { authStrength, strengthClaims } from "./strength";
 import { mandates } from "./mandates/plugin";
+import { coarseSessions, isSealedApp, pairwiseSecret, sealedTokens } from "./sealed";
 import { passkeyNotice } from "./passkey-notice";
 
 /** Scopes clients may ask for. `orgs` adds the user's organizations in the client's app to the access token. */
@@ -162,6 +163,8 @@ export function createAuth(env: Env, exec?: Exec) {
       accountTools(),
       authStrength(),
       mandates(env),
+      coarseSessions(env),
+      sealedTokens(env),
       passkeyNotice(env, (mail) => background(exec, sendMail(env, mail))),
       emailOTP({
         otpLength: 6,
@@ -219,6 +222,8 @@ export function createAuth(env: Env, exec?: Exec) {
         refreshTokenReuseInterval: 60,
         storeClientSecret: "hashed",
         allowDynamicClientRegistration: false,
+        // Pairwise ids for sealed apps (src/sealed.ts). Only clients registered with subject_type "pairwise" use it.
+        pairwiseSecret: pairwiseSecret(env),
         // Only the operator registers clients; signed-in users can't.
         clientPrivileges: ({ headers }) => isOperator(env, headers),
         clientReference: () => "operator",
@@ -235,7 +240,9 @@ export function createAuth(env: Env, exec?: Exec) {
         async customAccessTokenClaims({ user, scopes, metadata }) {
           if (!user) return {};
           const claims: Record<string, unknown> = {};
-          if (scopes.includes("email")) Object.assign(claims, { email: user.email, email_verified: user.emailVerified });
+          const sealed = isSealedApp(env, metadata?.app);
+          // Sealed apps can't be granted the email scope; this is the second lock on the same door.
+          if (scopes.includes("email") && !sealed) Object.assign(claims, { email: user.email, email_verified: user.emailVerified });
           if (scopes.includes("profile") && user.name) claims.name = user.name;
           const app = typeof metadata?.app === "string" ? metadata.app : null;
           if (app && scopes.includes("orgs")) claims.orgs = await orgClaims(await adapter(), user.id, app);

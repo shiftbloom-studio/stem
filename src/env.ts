@@ -35,6 +35,11 @@ export interface Env {
   PASS_ORIGINS?: string;
   /** Passes per account and UTC day. Default 50. */
   PASSES_PER_DAY?: string;
+  /** Sealed apps (docs/sealed-apps.md): app ids, comma separated (e.g. "drop,leaf,convert"). Unset means off. */
+  SEALED_APPS?: string;
+  /** 32+ random characters. Derives each sealed app's own `sub` for a person. Never change or remove it once
+   * a sealed app has users: their ids would change. Without it, sealed apps are off. */
+  PAIRWISE_SECRET?: string;
   /** "true" emails people when a passkey is added to their account (src/passkey-notice.ts). Off by default. */
   NOTIFY_NEW_PASSKEY?: string;
   /** "true" logs sign-in codes to the console instead of sending them. Only honored when STEM_URL is localhost. */

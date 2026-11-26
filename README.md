@@ -18,6 +18,7 @@ It runs on a single Cloudflare Worker.
 - **OpenID Connect for apps.** Authorization code flow with PKCE, rotating refresh tokens, RP-initiated logout, discovery and JWKS. Access tokens are EdDSA-signed JWTs for the app's API (RFC 8707 resource indicators) and carry an `orgs` claim with the person's teams in that app, plus how they signed in (`auth_method`), so an app can ask for a fresh passkey before admin actions.
 - **Mandates for agents.** Your passkey signs the exact rights an agent gets. The agent hands narrower copies to sub-agents without calling stem, apps check the whole chain back to your signature, and one stop button on your account page ends every branch. See [docs/mandates.md](docs/mandates.md).
 - **Passes: quotas without accounts.** stem is a [Privacy Pass](https://www.rfc-editor.org/rfc/rfc9578) issuer. A signed-in browser collects blinded passes (50 a day by default) and spends one per request at an app. The app checks stem's signature and learns nothing about who it is; stem learns how many passes an account took and nothing about where they went. See [docs/passes.md](docs/passes.md).
+- **Sealed apps.** An app can be registered as sealed: it gets an id for each person that only it uses, so two apps can't join their users, and it never gets the email address or reads people through the directory. While sealed apps are on, sessions keep only the network and the browser. See [docs/sealed-apps.md](docs/sealed-apps.md).
 - **A directory API for app servers.** Invitations, members, roles and team details, authorized with the app's own client credentials. An app only ever sees its own teams.
 
 How an app plugs in is described in [docs/integration.md](docs/integration.md).
@@ -91,6 +92,7 @@ npm run db:migrate                          # applies migrations/ to the remote 
 npx wrangler secret put BETTER_AUTH_SECRET  # 32+ random bytes
 npx wrangler secret put OPERATOR_TOKEN      # 32+ random bytes
 npx wrangler secret put TURNSTILE_SECRET    # optional, with TURNSTILE_SITE_KEY
+npx wrangler secret put PAIRWISE_SECRET     # optional, with SEALED_APPS; never change it once in use
 npm run deploy
 ```
 
@@ -105,6 +107,7 @@ Deploy settings (`.env.deploy`, or build variables in Workers Builds):
 | `RESOURCES` | Optional. APIs that get JWT access tokens, comma separated absolute URIs. |
 | `TURNSTILE_SITE_KEY` | Optional. Turnstile widget for "email me a code". Needs the `TURNSTILE_SECRET` secret. |
 | `MANDATE_APPS` | Optional. Apps that take mandates and their actions, as JSON. Empty turns mandates off. See [docs/mandates.md](docs/mandates.md). |
+| `SEALED_APPS` | Optional. Sealed apps, comma separated app ids. Needs the `PAIRWISE_SECRET` secret. Empty turns them off. See [docs/sealed-apps.md](docs/sealed-apps.md). |
 | `NOTIFY_NEW_PASSKEY` | Optional. `true` emails people whenever a passkey is added to their account, except for the first passkey right after sign-up. |
 
 Set `LEGAL` (operator details as JSON, see the comment in `wrangler.jsonc`) as a variable in the Cloudflare dashboard. It fills `/privacy`, `/datenschutz`, `/imprint` and `/impressum`; without it those pages are hidden. `keep_vars` keeps it across deploys.

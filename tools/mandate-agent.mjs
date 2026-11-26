@@ -13,6 +13,7 @@
 // A wallet file holds the chain and the holder's private key. Keep it like a password.
 import { SignJWT, generateKeyPair, exportJWK, importJWK } from "jose";
 import { readFileSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 
 export const REQUEST_TYP = "mandate-request+jwt";
 export const MANDATE_TYP = "mandate+jwt";
@@ -136,4 +137,5 @@ async function main() {
     process.exit(2);
   }
 }
-if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e.message || e); process.exit(1); });
+// compare as file URLs, so this also runs on Windows, where argv[1] is a drive path
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((e) => { console.error(e.message || e); process.exit(1); });

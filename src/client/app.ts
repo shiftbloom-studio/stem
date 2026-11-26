@@ -257,6 +257,8 @@ function li(main: string, meta: string, action?: { label: string; run: () => voi
 }
 const browserOf = (ua: string | null | undefined) => {
   if (!ua) return "Unknown browser";
+  // Already coarse (sealed apps on): "Firefox on Windows".
+  if (!ua.includes("/")) return ua;
   const b = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
   const os = /iPhone|iPad/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Mac OS X/.test(ua) ? "macOS" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
   return os ? `${b} on ${os}` : b;
