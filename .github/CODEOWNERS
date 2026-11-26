@@ -13,3 +13,6 @@ migrations/ @fabianzimber
 /src/claims.ts @fabianzimber
 /src/roles.ts @fabianzimber
 /src/gateway.ts @fabianzimber
+/src/api.ts @fabianzimber
+/src/limits.ts @fabianzimber
+/src/account.ts @fabianzimber
