@@ -101,6 +101,19 @@ export const accountTools = () =>
         ctx.setHeader("cache-control", "no-store");
         return ctx.json(data);
       }),
+      // Better Auth's /list-sessions wants a session younger than freshAge (15 minutes), so the account
+      // page showed nothing for anyone signed in longer. Seeing your own sessions isn't sensitive;
+      // ending one (/revoke-session) only needs a valid session too.
+      listOwnSessions: createAuthEndpoint("/stem/sessions", { method: "GET", use: [sessionMiddleware] }, async (ctx) => {
+        ctx.setHeader("cache-control", "no-store");
+        const now = Date.now();
+        const rows = await ctx.context.internalAdapter.listSessions(ctx.context.session.user.id, { onlyActiveSessions: true });
+        return ctx.json(
+          rows
+            .filter((s) => new Date(s.expiresAt).getTime() > now)
+            .map((s) => ({ id: s.id, token: s.token, userAgent: s.userAgent || null, ipAddress: s.ipAddress || null, createdAt: s.createdAt, updatedAt: s.updatedAt, expiresAt: s.expiresAt })),
+        );
+      }),
       listConnectedApps: createAuthEndpoint("/stem/apps", { method: "GET", use: [sessionMiddleware] }, async (ctx) => {
         ctx.setHeader("cache-control", "no-store");
         return ctx.json(await connectedApps(ctx.context.adapter as unknown as Db, ctx.context.session.user.id));
