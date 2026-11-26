@@ -71,11 +71,13 @@ async function signIn(b: Browser, email: string) {
 type Client = { client_id: string; client_secret: string; subject_type?: string; scope?: string };
 
 /** Code flow without a resource: opaque access token, ID token, then userinfo. */
-async function login(b: Browser, client: Client, callback: string, scope: string) {
+async function login(b: Browser, client: Client, callback: string, scope: string, resource?: string) {
   const verifier = randomBytes(32).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   const q = new URLSearchParams({ response_type: "code", client_id: client.client_id, redirect_uri: callback, scope, state: "s", nonce: "n", code_challenge: challenge, code_challenge_method: "S256" });
+  if (resource) q.set("resource", resource);
   const r = await b.fetch(`/api/auth/oauth2/authorize?${q}`);
+  if (!r.headers.get("location")) throw new Error(`authorize: ${r.status} ${await r.text()}`);
   const loc = new URL(r.headers.get("location")!);
   const code = loc.searchParams.get("code");
   if (!code) throw new Error(`authorize: ${loc.searchParams.get("error")}`);
@@ -151,6 +153,24 @@ describe("sealed apps", () => {
     // Stable across sign-ins.
     const again = await login(browser, drop, "https://drop.test/cb", "openid");
     expect(again.idToken.sub).toBe(a.idToken.sub);
+  });
+
+  it("refuses a resource from a sealed client, the userinfo endpoint too", async () => {
+    // Better Auth signs a JWT access token for any resource, and its sub is stem's shared user id.
+    await expect(login(browser, drop, "https://drop.test/cb", "openid", `${ORIGIN}/api/auth/oauth2/userinfo`)).rejects.toThrow(/invalid_target/);
+    // A shared client still gets one.
+    const c = await login(browser, shared, "https://va.test/cb", "openid", `${ORIGIN}/api/auth/oauth2/userinfo`);
+    expect(decodeJwt(c.accessToken).sub).toBe(userId);
+    // At the token endpoint too, with the client in the body or in Basic auth.
+    for (const auth of ["basic", "body"]) {
+      const headers: Record<string, string> = { "content-type": "application/x-www-form-urlencoded" };
+      const form = new URLSearchParams({ grant_type: "refresh_token", refresh_token: "x", resource: `${ORIGIN}/api/auth/oauth2/userinfo` });
+      if (auth === "basic") headers.authorization = "Basic " + btoa(`${drop.client_id}:${drop.client_secret}`);
+      else { form.set("client_id", drop.client_id); form.set("client_secret", drop.client_secret); }
+      const r = await browser.fetch("/api/auth/oauth2/token", { method: "POST", headers, body: form });
+      expect(r.status).toBe(400);
+      expect(await r.text()).toContain("invalid_target");
+    }
   });
 
   it("won't grant the email scope to a sealed app", async () => {

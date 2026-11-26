@@ -5,6 +5,7 @@
 // stem also keeps only coarse session data: the network instead of the IP address, browser and system
 // instead of the full user agent.
 import type { BetterAuthPlugin } from "better-auth";
+import { createAuthMiddleware, APIError } from "better-auth/api";
 import type { Env } from "./env";
 
 /** Apps listed in SEALED_APPS, when PAIRWISE_SECRET is long enough. Empty means sealed apps are off. */
@@ -80,3 +81,47 @@ export const coarseSessions = (env: Env) =>
       };
     },
   }) as unknown as BetterAuthPlugin;
+
+/** Paths where a client can ask for a `resource` (RFC 8707). */
+const RESOURCE_PATHS = new Set(["/oauth2/authorize", "/oauth2/token"]);
+
+function clientIdOf(query: unknown, body: unknown, headers: Headers | undefined): string | null {
+  const q = query as { client_id?: unknown } | undefined;
+  const b = body as { client_id?: unknown } | undefined;
+  if (typeof q?.client_id === "string" && q.client_id) return q.client_id;
+  if (typeof b?.client_id === "string" && b.client_id) return b.client_id;
+  const basic = /^Basic\s+(.+)$/i.exec(headers?.get("authorization") || "");
+  if (!basic) return null;
+  try {
+    const raw = atob(basic[1].trim());
+    const i = raw.indexOf(":");
+    return i > 0 ? decodeURIComponent(raw.slice(0, i)) : null;
+  } catch {
+    return null;
+  }
+}
+
+const hasResource = (v: unknown) => (v as { resource?: unknown } | undefined)?.resource !== undefined;
+
+/** Pairwise clients never get a signed access token. Better Auth signs one for any `resource`, the userinfo
+ * endpoint included (it needs no client link), and its `sub` is always stem's shared user id. So a request
+ * with a `resource` from a pairwise client is refused. Installed only while PAIRWISE_SECRET is set. */
+export const sealedTokens = (env: Env) =>
+  ({
+    id: "stem-sealed-tokens",
+    hooks: {
+      before: [
+        {
+          matcher: (ctx) => !!pairwiseSecret(env) && RESOURCE_PATHS.has(ctx.path || "") && (hasResource(ctx.query) || hasResource(ctx.body)),
+          handler: createAuthMiddleware(async (ctx) => {
+            const clientId = clientIdOf(ctx.query, ctx.body, ctx.headers);
+            if (!clientId) return;
+            const client = await ctx.context.adapter.findOne<{ subjectType?: string | null }>({ model: "oauthClient", where: [{ field: "clientId", value: clientId }] });
+            if (client?.subjectType === "pairwise") {
+              throw new APIError("BAD_REQUEST", { error: "invalid_target", error_description: "sealed apps get opaque access tokens; read the person from /oauth2/userinfo" });
+            }
+          }),
+        },
+      ],
+    },
+  }) satisfies BetterAuthPlugin;

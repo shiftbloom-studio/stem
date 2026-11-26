@@ -323,6 +323,21 @@ describe("mandates: the whole flow", () => {
     expect((await agentPost(off, "/api/auth/mandates/request", { request: await requestJwt(agent, { authorization_details: ROOT_RIGHTS, purpose: "x" }) })).status).toBe(404);
     expect((await new Browser(off).fetch("/mandates/approve?request=x")).status).toBe(404);
   });
+
+  it("refuses mandates for sealed apps: a mandate names the person by stem's shared id", async () => {
+    const operator = "op_" + "y".repeat(40);
+    const sealed = makeEnv({ OPERATOR_TOKEN: operator, SEALED_APPS: "drop", PAIRWISE_SECRET: "p".repeat(40) });
+    const reg = await new Browser(sealed).fetch("/api/v1/operator/clients", {
+      method: "POST",
+      headers: { authorization: `Bearer ${operator}`, "content-type": "application/json" },
+      body: JSON.stringify({ app: "drop", name: "drop", redirect_uris: [`${DROP}/cb`], skip_consent: true }),
+    });
+    expect(reg.status).toBe(201);
+    const agent = await newKey();
+    const r = await agentPost(sealed, "/api/auth/mandates/request", { request: await requestJwt(agent, { authorization_details: ROOT_RIGHTS, purpose: "x" }) });
+    expect(r.status).toBe(400);
+    expect(((await r.json()) as { code: string }).code).toBe("SEALED_APP");
+  });
 });
 
 describe("mandates: the verifier on its own", () => {

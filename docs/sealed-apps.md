@@ -6,7 +6,8 @@ A sealed app gets less:
 
 - **Its own id for each person.** stem gives a sealed app's clients [pairwise subject identifiers](https://openid.net/specs/openid-connect-core-1_0.html#PairwiseAlg): an HMAC of the person's stem id and the host of the client's redirect URI. The same person has a different `sub` in every sealed app, stable across sign-ins, and the ids can't be matched without stem's secret.
 - **No email address.** Sealed clients are registered without the `email` scope, so stem refuses to grant it, and the access token claims leave the address out even if a client asks for it.
-- **Opaque access tokens only.** Signed JWT access tokens for an API, and client-credentials tokens, carry stem's shared user id. Sealed clients can't ask for a `resource` and get no `client_credentials` grant. Read the person from `/api/auth/oauth2/userinfo`, which returns the pairwise `sub`, or from the ID token.
+- **Opaque access tokens only.** Signed JWT access tokens for an API, and client-credentials tokens, carry stem's shared user id. Sealed clients get no `client_credentials` grant, and stem refuses any `resource` they send to `/oauth2/authorize` or `/oauth2/token` (`invalid_target`), the userinfo endpoint included. Read the person from `/api/auth/oauth2/userinfo`, which returns the pairwise `sub`, or from the ID token.
+- **No mandates.** A mandate names the person by stem's shared user id, so stem refuses mandate requests for an app whose redirect host belongs to a sealed client (`SEALED_APP`).
 - **No people through the directory.** Members, invitations and user profiles carry the shared id and the address, so the directory API and the app gateway answer `403 sealed_app` for them. Organizations themselves stay available.
 
 While sealed apps are on, stem also stores less about every session: the network of the IP address (`203.0.113.0/24`, or the first 48 bits of an IPv6 address) and the browser and system (`Firefox on Windows`) instead of the full address and user agent. The account page still shows where someone is signed in. The privacy policy changes its wording to match.
@@ -34,4 +35,5 @@ Both settings are needed. Without either, sealed apps are off and stem behaves e
 - **Existing clients keep their ids.** Whether a client is pairwise is fixed when it is registered. A client registered before its app was sealed keeps the shared `sub`; register a new client to switch, knowing the app sees its existing users as new ones.
 - **Turning it off again.** Without `SEALED_APPS`, pairwise clients still get pairwise ids as long as `PAIRWISE_SECRET` is set, and still have no email scope. The directory guard and the coarse sessions stop.
 - **Rotating the secret** isn't supported. A new secret means new ids for everyone in every sealed app.
+- **Session ids.** ID tokens carry `sid`, the id of the person's stem session, so the app can sign them out. Two sealed apps used in the same stem session see the same `sid` until that session ends.
 - **It is still personal data.** A pairwise id is pseudonymous, not anonymous: stem can map it back.
