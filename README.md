@@ -1,12 +1,16 @@
 # stem.
 
+Multi-tenant auth for small apps. OIDC, passkeys and email codes, running on Cloudflare Workers.
+
+**Live:** [stem.shiftbloom.studio](https://stem.shiftbloom.studio) · **License:** AGPL-3.0-or-later
+
 stem is the sign-in behind shiftbloom studio's apps. You make one account, and every app that uses stem lets you in with it. There are no passwords: you sign in with a passkey, or with a six-digit code we email you.
 
 For apps, stem is an ordinary OpenID Connect provider with teams built in. An app sends people to stem, gets back a signed token that says who they are and which of its teams they're in, and manages those teams through a small API.
 
-It runs at [stem.shiftbloom.studio](https://stem.shiftbloom.studio) on a single Cloudflare Worker, and is made by [shiftbloom studio](https://shiftbloom.studio). The code is licensed under AGPL-3.0-or-later.
+It runs on a single Cloudflare Worker.
 
-## What it does
+## Features
 
 - **Passwordless sign-in.** Passkeys first, codes by email as the fallback. The first confirmed code creates the account. After that, stem offers to add a passkey once.
 - **Accounts people can manage.** Change your name, add and remove passkeys, see every signed-in device and end any of them, see which apps have access and remove them, download your data as JSON, delete your account.
@@ -16,7 +20,7 @@ It runs at [stem.shiftbloom.studio](https://stem.shiftbloom.studio) on a single 
 
 How an app plugs in is described in [docs/integration.md](docs/integration.md).
 
-## Security
+## Security model
 
 - No passwords to phish, reuse or reset. Codes are six digits, valid for ten minutes, stored only as a hash and limited to five tries.
 - Codes are also limited per address, whatever the IP: one per minute and ten per day, and fifteen sign-in attempts per day across all codes. After that the address is locked until the next day. Rotating IP addresses doesn't buy more guesses.
@@ -43,8 +47,6 @@ npx wrangler d1 execute stem-db --remote -c wrangler.deploy.jsonc --command "DEL
 
 If `BETTER_AUTH_SECRET` leaks, replace it too (`npx wrangler secret put BETTER_AUTH_SECRET`). That also ends every stem session.
 
-Please report security problems as described in [SECURITY.md](SECURITY.md).
-
 ## Architecture
 
 | Piece | What it does |
@@ -58,9 +60,17 @@ Please report security problems as described in [SECURITY.md](SECURITY.md).
 
 Storage is one D1 database. Email goes out through Cloudflare Email Service.
 
-## Privacy
+## Privacy and GDPR
 
 stem stores what signing in needs and deletes the rest. A daily cron (`src/cleanup.ts`) removes expired sessions, code hashes a day after they expire, per-IP and per-address counters, expired app tokens, invitations 90 days after they expire, and unconfirmed accounts that belong to no team after 30 days. People can download everything stem holds about them from their account page, remove an app's access, and delete their account. The privacy policy in `src/ui/legal.ts` (English and German) describes exactly this; if you change a period, change both.
+
+Together this covers the GDPR rights that matter for a sign-in service: access and portability (the JSON export), erasure (account deletion, which also removes the person's sessions, passkeys and team memberships) and storage limitation (the cleanup cron).
+
+## Tech stack
+
+- TypeScript on [Hono](https://hono.dev), with [Better Auth](https://www.better-auth.com) (pinned) for email codes, passkeys, organizations and the OAuth provider, and `jose` for tokens
+- Cloudflare Workers with D1, static assets, Email Service, rate limiting, Turnstile and a daily Cron Trigger
+- esbuild for the browser bundle, Node.js 26 for builds and tests, Vitest for tests
 
 ## Self-hosting
 
@@ -92,11 +102,13 @@ Deploy settings (`.env.deploy`, or build variables in Workers Builds):
 
 Set `LEGAL` (operator details as JSON, see the comment in `wrangler.jsonc`) as a variable in the Cloudflare dashboard. It fills `/privacy`, `/datenschutz`, `/imprint` and `/impressum`; without it those pages are hidden. `keep_vars` keeps it across deploys.
 
-With [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/), connect the repository, use `npm ci` as the build command and `npm run deploy` as the deploy command, and add the settings above as build variables.
-
 If you fork, point `SOURCE_URL` in `src/ui/layout.ts` at your repository (AGPL-3.0 section 13).
 
 Register an app and create its first team with the operator API, as shown in [docs/integration.md](docs/integration.md).
+
+### Deploy with Workers Builds
+
+stem.shiftbloom.studio deploys with [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) on every push to `main`, and no API token is stored on GitHub. Connect the repository to the Worker in the Cloudflare dashboard (Settings > Build), use `npm ci` as the build command and `npm run deploy` as the deploy command, and add the settings above as build variables. The build picks up Node 26 from `.node-version`.
 
 ## Development
 
@@ -119,4 +131,18 @@ D1 reads and writes per sign-in are in the single digits, and the Worker runs fo
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Please don't report vulnerabilities in public issues. Use GitHub's private vulnerability reporting on this repository or email [safety@shiftbloom.studio](mailto:safety@shiftbloom.studio). [SECURITY.md](SECURITY.md) has the details.
+
+## License
+
+Copyright © 2026 shiftbloom studio and contributors.
+
+stem is free software: you can redistribute it and/or modify it under the terms of the [GNU Affero General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version (`AGPL-3.0-or-later`). If you run a modified version for others over a network, offer them its source and point `SOURCE_URL` at your fork.
+
+---
+
+stem is part of [shiftbloom studio](https://shiftbloom.studio), an open studio from Hamburg. All of our apps are open source at [github.com/shiftbloom-studio](https://github.com/shiftbloom-studio).
