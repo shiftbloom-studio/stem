@@ -2,3 +2,6 @@
 export class WorkerEntrypoint<E = unknown> {
   constructor(protected ctx: ExecutionContext, protected env: E) {}
 }
+export class DurableObject<E = unknown> {
+  constructor(protected ctx: DurableObjectState, protected env: E) {}
+}

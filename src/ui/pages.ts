@@ -3,7 +3,7 @@ import { bloomSvg } from "../bloom";
 import { esc } from "./html";
 import { page, SOURCE_URL } from "./layout";
 
-export type Ui = { legal: boolean; turnstileSiteKey: string | null; origin: string };
+export type Ui = { legal: boolean; turnstileSiteKey: string | null; origin: string; mandates?: boolean };
 
 const DESC = "The sign-in behind shiftbloom studio apps. Passkeys or a code by email, no passwords. Open source, on Cloudflare Workers.";
 
@@ -131,7 +131,13 @@ export function accountPage(ui: Ui) {
       <h2>Apps with access</h2>
       <p class="small">Apps that can keep you signed in or that you said yes to. Removing one ends its access to your account within ten minutes.</p>
       <ul class="rows" id="apps" style="margin-top:8px"></ul>
-    </section>
+    </section>${ui.mandates ? `
+    <section class="panel sect">
+      <h2>Your agents</h2>
+      <p class="small">Agents you signed a mandate for with your passkey. Stopping one also stops every helper it handed rights to, on their next request.</p>
+      <ul class="rows" id="agents" style="margin-top:8px"></ul>
+      <ol class="rows small" id="trail" hidden style="margin-top:8px"></ol>
+    </section>` : ""}
     <section class="panel sect">
       <h2>Your data</h2>
       <p class="small">Everything stem stores about you, as one JSON file: your account, passkeys, sessions, teams, invitations and apps.</p>

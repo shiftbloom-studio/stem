@@ -13,6 +13,7 @@ import { sendMail, codeMail, inviteMail } from "./email";
 import { orgClaims, type ClaimsAdapter } from "./claims";
 import { timingSafeEqual } from "./util";
 import { authStrength, strengthClaims } from "./strength";
+import { mandates } from "./mandates/plugin";
 
 /** Scopes clients may ask for. `orgs` adds the user's organizations in the client's app to the access token. */
 export const SCOPES: string[] = ["openid", "profile", "email", "offline_access", "orgs"];
@@ -159,6 +160,7 @@ export function createAuth(env: Env, exec?: Exec) {
       emailLimits(),
       accountTools(),
       authStrength(),
+      mandates(env),
       emailOTP({
         otpLength: 6,
         expiresIn: CODE_LIFETIME_MS / 1000,
