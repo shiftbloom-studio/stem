@@ -42,5 +42,8 @@
     "typescript": "^7.0.2",
     "vitest": "^5.1.2",
     "wrangler": "^4.168.0"
+  },
+  "overrides": {
+    "sjcl": "1.0.9"
   }
 }
