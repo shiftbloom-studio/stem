@@ -336,7 +336,7 @@ describe("stem", () => {
     const q = new URLSearchParams({ response_type: "code", client_id: client.client_id, redirect_uri: "https://evil.test/cb", scope: "openid", code_challenge: challenge, code_challenge_method: "S256" });
     const r = await browser.fetch(`/api/auth/oauth2/authorize?${q}`);
     const loc = r.headers.get("location") || "";
-    expect(loc.startsWith("https://evil.test")).toBe(false);
+    expect(loc ? new URL(loc, "https://stem.test").hostname : "").not.toBe("evil.test");
   });
 
   describe("directory API", () => {

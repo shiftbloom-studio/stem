@@ -70,7 +70,9 @@ const next = () => {
   // newlines, so "/\t/evil.example" would turn into "//evil.example".
   if (n.length > 512 || !n.startsWith("/") || n.startsWith("//") || n.includes("\\") || /[\u0000-\u001f]/.test(n)) return "/account";
   try {
-    return new URL(n, location.origin).origin === location.origin ? n : "/account";
+    const u = new URL(n, location.origin);
+    // Rebuilt on our own origin, so the result can only ever point back at this site.
+    return u.origin === location.origin ? `${location.origin}${u.pathname}${u.search}${u.hash}` : "/account";
   } catch {
     return "/account";
   }
