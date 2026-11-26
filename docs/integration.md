@@ -176,7 +176,7 @@ An app can give signed-in people more (free conversions, uploads, requests) with
 
 ## Things to know
 
-- `sub` is the same for a person across all apps on one stem. Don't treat it as a secret.
+- `sub` is the same for a person across all apps on one stem, except sealed apps, which get their own (see [sealed-apps.md](sealed-apps.md)). Don't treat it as a secret.
 - The directory API can add any existing stem account to one of your organizations by email or user id, without an invitation. That's meant for first-party apps registered by the operator; use invitations when the person should agree first.
 - People can't change organizations on stem itself. Renaming, metadata, members and deletion all go through your app and the directory API.
 - Per-IP limits treat every IPv6 address on its own.

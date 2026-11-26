@@ -14,6 +14,7 @@ import { inviteMail, sendMail } from "./email";
 import { timingSafeEqual } from "./util";
 import { chunks } from "./claims";
 import { gatewayOf } from "./gateway";
+import { isSealedApp, sealedEnabled, sealedScopes } from "./sealed";
 
 type Vars = { auth: Auth; app: string; clientId: string };
 type C = Context<{ Bindings: Env; Variables: Vars }>;
@@ -106,6 +107,13 @@ export function apiRoutes() {
     const known = new Set(resourceList(c.env));
     const resources = (b.resources || []).filter((r) => known.has(r));
     if ((b.resources || []).length !== resources.length) return err(c, 400, "invalid_target", "every resource must be listed in the RESOURCES variable");
+    // Sealed apps (src/sealed.ts): their own sub per person, no email scope, and opaque access tokens only.
+    // Signed access tokens and client-credentials tokens would carry stem's shared user id or reach the directory.
+    const sealed = isSealedApp(c.env, b.app);
+    if (sealed && resources.length) return err(c, 400, "invalid_target", "sealed apps get opaque access tokens; read the person from /oauth2/userinfo");
+    const sealedClient = sealed
+      ? { subject_type: "pairwise" as const, scope: sealedScopes(SCOPES).join(" "), grant_types: ["authorization_code", "refresh_token"], client_credentials_scopes: undefined, resources: undefined }
+      : null;
     const created = await c.get("auth").api.adminCreateOAuthClient({
       headers: new Headers({ [OPERATOR_HEADER]: c.env.OPERATOR_TOKEN! }),
       body: {
@@ -124,6 +132,7 @@ export function apiRoutes() {
         enable_end_session: true,
         require_pkce: true,
         metadata: { app: b.app },
+        ...(sealedClient || {}),
       },
     });
     return c.json(created, 201);
@@ -189,6 +198,15 @@ export function apiRoutes() {
     if (gateway && gateway.app !== app) return err(c, 403, "app_mismatch");
     c.set("app", app);
     c.set("clientId", clientId);
+    await next();
+  });
+
+  // Sealed apps don't see people through the directory: members, invitations and profiles carry
+  // stem's shared user id and the email address. Organizations themselves stay available.
+  dir.use("*", async (c, next) => {
+    if (!sealedEnabled(c.env) || !isSealedApp(c.env, c.get("app"))) return next();
+    const p = c.req.path;
+    if (/\/orgs\/[^/]+\/(members|invitations)(\/|$)/.test(p) || /\/users(\/|$)/.test(p)) return err(c, 403, "sealed_app", "sealed apps can't read or manage people through the directory");
     await next();
   });
 

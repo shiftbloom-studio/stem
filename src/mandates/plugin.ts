@@ -9,6 +9,7 @@ import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { decodeCredentialPublicKey } from "@simplewebauthn/server/helpers";
 import { jwtVerify, EmbeddedJWK, calculateJwkThumbprint, decodeProtectedHeader, type JWK } from "jose";
 import type { Env } from "../env";
+import { pairwiseSecret } from "../sealed";
 import { MANDATE_TYP, parseRights, rootChallenge, verifyHumanProof, b64u, type Right, type Budget, type HumanProof } from "./verify";
 
 export const REQUEST_TYP = "mandate-request+jwt";
@@ -112,6 +113,19 @@ export function parseTerms(apps: MandateApps, p: Record<string, unknown>): Reque
   return { rights, purpose, ttl, del_max_depth: depth, budget };
 }
 
+/** Hosts of pairwise (sealed) clients' redirect URIs. */
+async function pairwiseHosts(db: Db): Promise<Set<string>> {
+  const clients = await db.findMany<{ redirectUris?: unknown }>({ model: "oauthClient", where: [{ field: "subjectType", value: "pairwise" }], limit: 500 });
+  const hosts = new Set<string>();
+  for (const c of clients) {
+    const raw = c.redirectUris;
+    let list: unknown = raw;
+    if (typeof raw === "string") { try { list = JSON.parse(raw); } catch { list = raw.split(","); } }
+    for (const u of Array.isArray(list) ? list : []) { try { hosts.add(new URL(String(u).trim()).host); } catch { /* not a URL */ } }
+  }
+  return hosts;
+}
+
 /** COSE public key (as Better Auth stores it, base64) → JWK, for the human proof inside the token. */
 export function coseToJwk(stored: string): JWK {
   // COSE_Key (RFC 9052): 1 kty, -1 crv or n, -2 x or e, -3 y. kty 2 = EC2, 1 = OKP, 3 = RSA.
@@ -175,6 +189,12 @@ export const mandates = (env: Env) =>
         delete agentJwk.d;
         const terms = parseTerms(mandateApps(env), payload as Record<string, unknown>);
         const db = ctx.context.adapter as unknown as Db;
+        // A mandate names the person by stem's shared user id. Sealed apps (src/sealed.ts) must never see it.
+        if (pairwiseSecret(env)) {
+          const sealedHosts = await pairwiseHosts(db);
+          for (const r of terms.rights)
+            for (const l of r.locations) if (sealedHosts.has(new URL(l).host)) throw bad(`${l} is a sealed app and doesn't take mandates`, "SEALED_APP");
+        }
         const now = new Date();
         // Old requests go when new ones come; approved ones keep their token only until they expire.
         await db.deleteMany({ model: "mandateRequest", where: [{ field: "expiresAt", operator: "lt", value: now }] });
