@@ -1,6 +1,6 @@
 {
   "name": "stem",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Sign-in for shiftbloom studio apps: passkeys, email codes, organizations and OpenID Connect on Cloudflare Workers",
   "private": true,
   "type": "module",
