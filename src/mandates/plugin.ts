@@ -73,9 +73,13 @@ const bad = (message: string, code = "INVALID_REQUEST") => new APIError("BAD_REQ
 const str = (v: unknown, max = 200) => (typeof v === "string" && v.length > 0 && v.length <= max ? v : null);
 const nat = (v: unknown) => (typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : null);
 
+/** Eight letters from CODE_ALPHABET without modulo bias: bytes at or above the largest multiple of its
+ * length are thrown away. */
 function userCode() {
-  const b = crypto.getRandomValues(new Uint8Array(8));
-  const c = [...b].map((x) => CODE_ALPHABET[x % CODE_ALPHABET.length]).join("");
+  const n = CODE_ALPHABET.length;
+  const limit = 256 - (256 % n);
+  let c = "";
+  while (c.length < 8) for (const x of crypto.getRandomValues(new Uint8Array(16))) if (x < limit && c.length < 8) c += CODE_ALPHABET[x % n];
   return `${c.slice(0, 4)}-${c.slice(4)}`;
 }
 
