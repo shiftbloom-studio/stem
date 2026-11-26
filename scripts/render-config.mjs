@@ -17,6 +17,7 @@ const OPTIONAL = {
   ORG_ROLES: "Extra team roles, comma separated",
   RESOURCES: "APIs that get JWT access tokens, comma separated absolute URIs",
   TURNSTILE_SITE_KEY: "Turnstile site key for \"email me a code\" (also set the TURNSTILE_SECRET secret)",
+  PASS_ORIGINS: "App pages that may fetch passes, comma separated origins",
 };
 
 const example = process.argv.includes("--example");

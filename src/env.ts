@@ -27,6 +27,10 @@ export interface Env {
   RESOURCES?: string;
   /** Operator details for the imprint and privacy policy, as JSON. Legal pages are hidden when unset. */
   LEGAL?: string;
+  /** Origins of app pages that may fetch passes for signed-in people, comma separated (e.g. "https://convert.example.com"). */
+  PASS_ORIGINS?: string;
+  /** Passes per account and UTC day. Default 50. */
+  PASSES_PER_DAY?: string;
   /** "true" logs sign-in codes to the console instead of sending them. Only honored when STEM_URL is localhost. */
   DEV_LOG_EMAIL?: string;
 }
