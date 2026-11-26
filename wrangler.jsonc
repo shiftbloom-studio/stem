@@ -26,6 +26,8 @@
     "RESOURCES": "<RESOURCES?>",
     // Turnstile on "email me a code" (also set the TURNSTILE_SECRET secret).
     "TURNSTILE_SITE_KEY": "<TURNSTILE_SITE_KEY?>",
+    // Apps that take mandates, as JSON (docs/mandates.md). Empty turns mandates off.
+    "MANDATE_APPS": "<MANDATE_APPS?>",
     // App pages that may fetch passes (anonymous quota tokens) for signed-in people, comma separated origins.
     "PASS_ORIGINS": "<PASS_ORIGINS?>"
     // Optional: operator details for /imprint, /impressum, /privacy and /datenschutz (hidden when unset).
@@ -43,6 +45,10 @@
 
   // Cloudflare Email Sending. The domain of EMAIL_FROM must be onboarded to Email Service.
   "send_email": [{ "name": "EMAIL" }],
+
+  // Mandates: one SQLite-backed Durable Object per root mandate (stop button, shared budget, trail).
+  "durable_objects": { "bindings": [{ "name": "MANDATE", "class_name": "Mandate" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Mandate"] }],
 
   // Per IP and minute, on top of Better Auth's own per-endpoint limits (stored in D1).
   "ratelimits": [
