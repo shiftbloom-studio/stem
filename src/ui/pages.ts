@@ -113,9 +113,7 @@ export function accountPage(ui: Ui) {
       <ul class="rows" id="passkeys" style="margin-top:8px"></ul>
       <button class="btn sm" type="button" id="add-passkey" style="margin-top:12px">Add a passkey</button>
     </section>
-  </div>
-  <div>
-    <section class="panel">
+    <section class="panel sect">
       <h2>Where you're signed in</h2>
       <ul class="rows" id="sessions" style="margin-top:8px"></ul>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
@@ -123,7 +121,9 @@ export function accountPage(ui: Ui) {
         <button class="btn sm" type="button" id="sign-out">Sign out</button>
       </div>
     </section>
-    <section class="panel sect">
+  </div>
+  <div>
+    <section class="panel">
       <h2>Teams</h2>
       <ul class="rows" id="orgs" style="margin-top:8px"></ul>
     </section>

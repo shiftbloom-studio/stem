@@ -311,7 +311,9 @@ async function account() {
   async function loadSessions() {
     const ul = $("sessions"); if (!ul) return;
     ul.replaceChildren();
-    const res = await client.listSessions();
+    const res = await client.$fetch<{ token: string; id: string; userAgent?: string | null; ipAddress?: string | null; createdAt: string }[]>("/stem/sessions", { method: "GET" });
+    if (res.error) { fail(explain(res.error as ApiError, "We couldn't load where you're signed in.")); return; }
+    if (!Array.isArray(res.data) || !res.data.length) { ul.append(li("This browser", `Since ${fmt(session.createdAt)}`)); return; }
     for (const x of (res.data || []) as { token: string; id: string; userAgent?: string | null; ipAddress?: string | null; createdAt: string | Date }[]) {
       const current = x.id === session.id;
       ul.append(li(`${browserOf(x.userAgent)}${current ? " (this one)" : ""}`, `Since ${fmt(x.createdAt)}${x.ipAddress ? ` · ${x.ipAddress}` : ""}`, current ? undefined : {
