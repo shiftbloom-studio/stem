@@ -19,6 +19,7 @@ const OPTIONAL = {
   TURNSTILE_SITE_KEY: "Turnstile site key for \"email me a code\" (also set the TURNSTILE_SECRET secret)",
   MANDATE_APPS: "Apps that take mandates, as JSON (docs/mandates.md)",
   PASS_ORIGINS: "App pages that may fetch passes, comma separated origins",
+  NOTIFY_NEW_PASSKEY: "\"true\" emails people whenever a passkey is added to their account",
 };
 
 const example = process.argv.includes("--example");

@@ -35,6 +35,8 @@ export interface Env {
   PASS_ORIGINS?: string;
   /** Passes per account and UTC day. Default 50. */
   PASSES_PER_DAY?: string;
+  /** "true" emails people when a passkey is added to their account (src/passkey-notice.ts). Off by default. */
+  NOTIFY_NEW_PASSKEY?: string;
   /** "true" logs sign-in codes to the console instead of sending them. Only honored when STEM_URL is localhost. */
   DEV_LOG_EMAIL?: string;
 }

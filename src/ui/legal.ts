@@ -6,9 +6,12 @@ import { page } from "./layout";
 
 export type LegalKind = "privacy" | "datenschutz" | "imprint" | "impressum";
 export const LEGAL_PATHS: Record<string, LegalKind> = { "/privacy": "privacy", "/datenschutz": "datenschutz", "/imprint": "imprint", "/impressum": "impressum" };
-const UPDATED = { en: "Last updated: 25 November 2026", de: "Stand: 25. November 2026" };
+const UPDATED = { en: "Last updated: 26 November 2026", de: "Stand: 26. November 2026" };
 
-export function legalPage(kind: LegalKind, l: Legal, o: { turnstile: boolean }) {
+/** passkeyNotice: people get an email when a passkey is added (src/passkey-notice.ts). */
+export type LegalOptions = { turnstile: boolean; passkeyNotice?: boolean };
+
+export function legalPage(kind: LegalKind, l: Legal, o: LegalOptions) {
   const de = kind === "datenschutz" || kind === "impressum";
   const lang = de ? "de" : "en";
   const isPrivacy = kind === "privacy" || kind === "datenschutz";
@@ -35,7 +38,7 @@ function imprint(de: boolean, address: string, mail: string, l: Legal) {
 <h2>Consumer dispute resolution</h2><p>We are not willing or obliged to take part in dispute resolution proceedings before a consumer arbitration board.</p>`;
 }
 
-function privacyEn(address: string, mail: string, l: Legal, o: { turnstile: boolean }) {
+function privacyEn(address: string, mail: string, l: Legal, o: LegalOptions) {
   return `<p>stem is the sign-in service for shiftbloom studio apps. You create an account here once and then use it to sign in to those apps. This policy explains what we store for that, who gets to see it, and when it's deleted. There is no tracking or advertising, no analysis of your behavior and no automated decision-making about you.</p>
 <h2>Controller</h2>${address}<p>Email: ${mail}</p>
 <h2>Hosting</h2>
@@ -45,7 +48,7 @@ function privacyEn(address: string, mail: string, l: Legal, o: { turnstile: bool
 <h2>Your account</h2>
 <p>Your account consists of your email address, the name you give us, whether your address is confirmed, a random user id, and when the account was created and last changed. We need it to sign you in and to tell apps who you are (Art. 6(1)(b) GDPR).</p>
 <p><strong>Codes by email.</strong> When you ask for a sign-in code, we send it to your address and keep only a checksum of the code, together with your address, for the 10 minutes it is valid. The entry is deleted within a day after that. The email is sent through Cloudflare Email Service, which processes your address and the message as our processor.</p>
-<p><strong>Passkeys.</strong> For each passkey we store its public key, its id, a name, whether it is synced between devices, which kind of authenticator created it (for example a password manager) and when it was added. The private key never leaves your device, and we never see your fingerprint, face or PIN.</p>
+<p><strong>Passkeys.</strong> For each passkey we store its public key, its id, a name, whether it is synced between devices, which kind of authenticator created it (for example a password manager) and when it was added. The private key never leaves your device, and we never see your fingerprint, face or PIN.${o.passkeyNotice ? " When a passkey is added to your account, we email you about it, so you notice one you didn't add." : ""}</p>
 <p><strong>Sessions.</strong> While you're signed in, we store a session with its creation and expiry time, how you signed in (passkey or email code, and whether the passkey is synced), your IP address and your browser's user agent, so you can see where you're signed in and end sessions you don't recognize. A session ends when you sign out, after 30 days without use, or when you end it from your account page. Ended sessions are deleted right away, expired ones within a day.</p>
 <h2>Apps you sign in to</h2>
 <p>When you sign in to an app with stem, the app learns your user id and, if it asks and you agree (or it is one of our own apps), your name, your email address and which of its teams you're in with your role. It also learns whether you signed in with a passkey or an email code, and when, so it can ask you to confirm with your passkey before sensitive actions. We store that you allowed it and the tokens the app uses to keep you signed in, as checksums, for up to 30 days after their last use. Your account page lists these apps, and you can remove an app's access there at any time. Each app is responsible for what it does with this data; its own privacy policy tells you more. The legal basis is the sign-in you ask for (Art. 6(1)(b) GDPR).</p>
@@ -67,7 +70,7 @@ function privacyEn(address: string, mail: string, l: Legal, o: { turnstile: bool
 <p><strong>You may object at any time, on grounds relating to your particular situation, to the processing of your personal data based on Art. 6(1)(f) GDPR (Art. 21 GDPR).</strong></p>`;
 }
 
-function privacyDe(address: string, mail: string, l: Legal, o: { turnstile: boolean }) {
+function privacyDe(address: string, mail: string, l: Legal, o: LegalOptions) {
   return `<p>stem ist der Anmeldedienst für die Apps von shiftbloom studio. Du legst hier einmal ein Konto an und meldest dich damit bei diesen Apps an. Diese Erklärung beschreibt, was wir dafür speichern, wer es sehen kann und wann es gelöscht wird. Es gibt kein Tracking und keine Werbung, wir werten dein Verhalten nicht aus und treffen keine automatisierten Entscheidungen über dich.</p>
 <h2>Verantwortlicher</h2>${address}<p>E-Mail: ${mail}</p>
 <h2>Hosting</h2>
@@ -77,7 +80,7 @@ function privacyDe(address: string, mail: string, l: Legal, o: { turnstile: bool
 <h2>Dein Konto</h2>
 <p>Dein Konto besteht aus deiner E-Mail-Adresse, dem Namen, den du angibst, ob deine Adresse bestätigt ist, einer zufälligen Nutzer-ID und wann das Konto angelegt und zuletzt geändert wurde. Wir brauchen es, um dich anzumelden und Apps mitzuteilen, wer du bist (Art. 6 Abs. 1 lit. b DSGVO).</p>
 <p><strong>Codes per E-Mail.</strong> Wenn du einen Anmeldecode anforderst, schicken wir ihn an deine Adresse und speichern nur eine Prüfsumme des Codes zusammen mit deiner Adresse, für die 10 Minuten, die er gilt. Der Eintrag wird spätestens einen Tag danach gelöscht. Die E-Mail wird über Cloudflare Email Service versendet, der deine Adresse und die Nachricht als unser Auftragsverarbeiter verarbeitet.</p>
-<p><strong>Passkeys.</strong> Zu jedem Passkey speichern wir seinen öffentlichen Schlüssel, seine ID, einen Namen, ob er zwischen Geräten synchronisiert wird, welche Art von Authenticator ihn erstellt hat (zum Beispiel ein Passwortmanager) und wann er hinzugefügt wurde. Der private Schlüssel verlässt dein Gerät nie, und deinen Fingerabdruck, dein Gesicht oder deine PIN sehen wir nicht.</p>
+<p><strong>Passkeys.</strong> Zu jedem Passkey speichern wir seinen öffentlichen Schlüssel, seine ID, einen Namen, ob er zwischen Geräten synchronisiert wird, welche Art von Authenticator ihn erstellt hat (zum Beispiel ein Passwortmanager) und wann er hinzugefügt wurde. Der private Schlüssel verlässt dein Gerät nie, und deinen Fingerabdruck, dein Gesicht oder deine PIN sehen wir nicht.${o.passkeyNotice ? " Wird deinem Konto ein Passkey hinzugefügt, schicken wir dir eine E-Mail, damit dir ein fremder Passkey auffällt." : ""}</p>
 <p><strong>Sitzungen.</strong> Solange du angemeldet bist, speichern wir eine Sitzung mit Beginn und Ablauf, wie du dich angemeldet hast (Passkey oder Code per E-Mail, und ob der Passkey synchronisiert wird), deiner IP-Adresse und dem User-Agent deines Browsers, damit du siehst, wo du angemeldet bist, und Sitzungen beenden kannst, die du nicht kennst. Eine Sitzung endet, wenn du dich abmeldest, nach 30 Tagen ohne Nutzung oder wenn du sie auf deiner Kontoseite beendest. Beendete Sitzungen werden sofort gelöscht, abgelaufene spätestens nach einem Tag.</p>
 <h2>Apps, bei denen du dich anmeldest</h2>
 <p>Wenn du dich mit stem bei einer App anmeldest, erfährt die App deine Nutzer-ID und, wenn sie danach fragt und du zustimmst (oder es eine unserer eigenen Apps ist), deinen Namen, deine E-Mail-Adresse und in welchen ihrer Teams du mit welcher Rolle bist. Sie erfährt außerdem, ob und wann du dich mit einem Passkey oder einem Code per E-Mail angemeldet hast, damit sie dich vor heiklen Aktionen um eine Bestätigung mit deinem Passkey bitten kann. Wir speichern, dass du zugestimmt hast, und die Tokens, mit denen die App dich angemeldet hält, als Prüfsummen, bis zu 30 Tage nach ihrer letzten Nutzung. Deine Kontoseite zeigt diese Apps, und du kannst einer App dort jederzeit den Zugriff entziehen. Für das, was eine App mit diesen Daten macht, ist sie selbst verantwortlich; mehr steht in ihrer eigenen Datenschutzerklärung. Rechtsgrundlage ist die Anmeldung, um die du bittest (Art. 6 Abs. 1 lit. b DSGVO).</p>

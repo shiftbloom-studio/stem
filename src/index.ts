@@ -19,6 +19,7 @@ import { approvePage, answeredPage } from "./mandates/page";
 import { mandateApps, mandatesEnabled, type RequestRow, type RequestTerms } from "./mandates/plugin";
 import { passRoutes, directory, passOrigins, DIRECTORY_PATH } from "./passes/routes";
 import { cleanupPasses } from "./passes/issuer";
+import { passkeyNoticeEnabled } from "./passkey-notice";
 
 const TURNSTILE = "https://challenges.cloudflare.com";
 const CSP = [
@@ -112,7 +113,7 @@ for (const [path, kind] of Object.entries(LEGAL_PATHS)) {
   app.get(path, (c) => {
     const legal = parseLegal(c.env.LEGAL);
     if (!legal) return html(messagePage(ui(c.env), "Not here", "This page doesn't exist."), 404);
-    return html(legalPage(kind, legal, { turnstile: !!ui(c.env).turnstileSiteKey }), 200, "public, max-age=3600");
+    return html(legalPage(kind, legal, { turnstile: !!ui(c.env).turnstileSiteKey, passkeyNotice: passkeyNoticeEnabled(c.env) }), 200, "public, max-age=3600");
   });
 }
 

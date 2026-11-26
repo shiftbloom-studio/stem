@@ -29,7 +29,9 @@
     // Apps that take mandates, as JSON (docs/mandates.md). Empty turns mandates off.
     "MANDATE_APPS": "<MANDATE_APPS?>",
     // App pages that may fetch passes (anonymous quota tokens) for signed-in people, comma separated origins.
-    "PASS_ORIGINS": "<PASS_ORIGINS?>"
+    "PASS_ORIGINS": "<PASS_ORIGINS?>",
+    // "true" emails people whenever a passkey is added to their account. Empty turns it off.
+    "NOTIFY_NEW_PASSKEY": "<NOTIFY_NEW_PASSKEY?>"
     // Optional: operator details for /imprint, /impressum, /privacy and /datenschutz (hidden when unset).
     // Set it in the dashboard or your deploy pipeline rather than committing it.
     // "LEGAL": "{\"name\":\"Jane Doe\",\"street\":\"Example St 1\",\"city\":\"12345 Town\",\"country\":{\"en\":\"Germany\",\"de\":\"Deutschland\"},\"email\":\"jane@example.com\",\"authority\":\"Your data protection authority, address\"}"

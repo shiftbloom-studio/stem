@@ -13,7 +13,7 @@ It runs on a single Cloudflare Worker.
 ## Features
 
 - **Passwordless sign-in.** Passkeys first, codes by email as the fallback. The first confirmed code creates the account. After that, stem offers to add a passkey once.
-- **Accounts people can manage.** Change your name, add and remove passkeys, see every signed-in device and end any of them, see which apps have access and remove them, download your data as JSON, delete your account.
+- **Accounts people can manage.** Change your name, add and remove passkeys, see every signed-in device and end any of them, see which apps have access and remove them, download your data as JSON, delete your account. Optionally, an email whenever a passkey is added, so a passkey someone else slipped in doesn't go unnoticed.
 - **Teams per app.** Organizations belong to one app. Members have a role (`owner`, `admin`, `member`, plus any roles the operator adds, like `dispatcher` or `pilot`). Invitations go out by email and are accepted on stem.
 - **OpenID Connect for apps.** Authorization code flow with PKCE, rotating refresh tokens, RP-initiated logout, discovery and JWKS. Access tokens are EdDSA-signed JWTs for the app's API (RFC 8707 resource indicators) and carry an `orgs` claim with the person's teams in that app, plus how they signed in (`auth_method`), so an app can ask for a fresh passkey before admin actions.
 - **Mandates for agents.** Your passkey signs the exact rights an agent gets. The agent hands narrower copies to sub-agents without calling stem, apps check the whole chain back to your signature, and one stop button on your account page ends every branch. See [docs/mandates.md](docs/mandates.md).
@@ -28,6 +28,7 @@ How an app plugs in is described in [docs/integration.md](docs/integration.md).
 - Codes are also limited per address, whatever the IP: one per minute and ten per day, and fifteen sign-in attempts per day across all codes. After that the address is locked until the next day. Rotating IP addresses doesn't buy more guesses.
 - Sending codes is protected by Cloudflare Turnstile, a per-endpoint limit and a per-IP limit through the Workers rate limiting binding.
 - Passkeys must verify the person (PIN or biometric), not just the device.
+- With `NOTIFY_NEW_PASSKEY`, every passkey added to an account triggers an email to its address, so someone who got hold of a session or a code can't quietly add a way back in.
 - Session cookies are `__Secure-`, `HttpOnly`, `SameSite=Lax` and host-only on stem's origin. Apps never see them; they get tokens.
 - Clients are registered by the operator only. Users can't register clients, and dynamic client registration is off. Redirect URIs must match exactly. PKCE is required.
 - Pages ship without inline scripts under a strict Content Security Policy, with `frame-ancestors 'none'`, HSTS and no third-party requests (fonts are proxied).
@@ -104,6 +105,7 @@ Deploy settings (`.env.deploy`, or build variables in Workers Builds):
 | `RESOURCES` | Optional. APIs that get JWT access tokens, comma separated absolute URIs. |
 | `TURNSTILE_SITE_KEY` | Optional. Turnstile widget for "email me a code". Needs the `TURNSTILE_SECRET` secret. |
 | `MANDATE_APPS` | Optional. Apps that take mandates and their actions, as JSON. Empty turns mandates off. See [docs/mandates.md](docs/mandates.md). |
+| `NOTIFY_NEW_PASSKEY` | Optional. `true` emails people whenever a passkey is added to their account, except right after sign-up. |
 
 Set `LEGAL` (operator details as JSON, see the comment in `wrangler.jsonc`) as a variable in the Cloudflare dashboard. It fills `/privacy`, `/datenschutz`, `/imprint` and `/impressum`; without it those pages are hidden. `keep_vars` keeps it across deploys.
 
