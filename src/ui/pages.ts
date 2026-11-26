@@ -54,7 +54,7 @@ export function signInPage(ui: Ui, clientName: string | null) {
       <button class="btn wide" type="button" id="passkey-btn" hidden>Sign in with a passkey</button>
       <div class="or" id="passkey-or" hidden>or</div>
       <form class="stack" id="email-form" novalidate>
-        <label class="f">Email address<input type="email" name="email" id="email" required autocomplete="email" inputmode="email" maxlength="254" placeholder="you@example.com"></label>
+        <label class="f">Email address<input type="email" name="email" id="email" required autocomplete="username webauthn" inputmode="email" maxlength="254" placeholder="you@example.com"></label>
         ${ui.turnstileSiteKey ? `<div class="cf-turnstile" data-sitekey="${esc(ui.turnstileSiteKey)}" data-action="send-code" data-theme="light" data-size="flexible"></div>` : ""}
         <button class="btn wide" type="submit">Email me a code</button>
       </form>
