@@ -116,6 +116,9 @@ describe("passkey notice", () => {
     const f = await signIn(env, "fresh@example.com");
     expect((await addPasskey(f, "Phone")).status).toBe(200);
     expect(notices("fresh@example.com")).toHaveLength(0);
+    // A second passkey inside the window is not the sign-up any more.
+    expect((await addPasskey(f, "Laptop")).status).toBe(200);
+    expect(notices("fresh@example.com")).toHaveLength(1);
   });
 
   it("is off by default", async () => {

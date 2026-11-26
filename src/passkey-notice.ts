@@ -7,8 +7,9 @@ import { createAuthMiddleware } from "better-auth/api";
 import type { Env } from "./env";
 import { passkeyAddedMail, type Mail } from "./email";
 
-/** No notice for a passkey added this soon after the account was created: that's the person's own
- * sign-up, and nobody else could have had the account yet. */
+/** No notice for the account's first passkey when it is added this soon after the account was created:
+ * that's the person's own sign-up. A second passkey always gets one, so someone who takes over a fresh
+ * session can't add theirs unnoticed inside the window. */
 export const NEW_ACCOUNT_GRACE_MS = 15 * 60 * 1000;
 
 export const passkeyNoticeEnabled = (env: Pick<Env, "NOTIFY_NEW_PASSKEY">) => env.NOTIFY_NEW_PASSKEY === "true";
@@ -31,7 +32,10 @@ export const passkeyNotice = (env: Env, send: (mail: Mail) => void) =>
               const user = (await ctx.context.internalAdapter.findUserById(pk.userId)) as UserRow | null;
               if (!user?.email) return;
               const added = pk.createdAt ? new Date(pk.createdAt as string) : new Date();
-              if (added.getTime() - new Date(user.createdAt).getTime() < NEW_ACCOUNT_GRACE_MS) return;
+              if (added.getTime() - new Date(user.createdAt).getTime() < NEW_ACCOUNT_GRACE_MS) {
+                const keys = await ctx.context.adapter.findMany({ model: "passkey", where: [{ field: "userId", value: user.id }], limit: 2 });
+                if (keys.length <= 1) return;
+              }
               send(passkeyAddedMail(user.email, {
                 name: typeof pk.name === "string" && pk.name.trim() ? pk.name.trim().slice(0, 80) : null,
                 synced: !!pk.backedUp,

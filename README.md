@@ -105,7 +105,7 @@ Deploy settings (`.env.deploy`, or build variables in Workers Builds):
 | `RESOURCES` | Optional. APIs that get JWT access tokens, comma separated absolute URIs. |
 | `TURNSTILE_SITE_KEY` | Optional. Turnstile widget for "email me a code". Needs the `TURNSTILE_SECRET` secret. |
 | `MANDATE_APPS` | Optional. Apps that take mandates and their actions, as JSON. Empty turns mandates off. See [docs/mandates.md](docs/mandates.md). |
-| `NOTIFY_NEW_PASSKEY` | Optional. `true` emails people whenever a passkey is added to their account, except right after sign-up. |
+| `NOTIFY_NEW_PASSKEY` | Optional. `true` emails people whenever a passkey is added to their account, except for the first passkey right after sign-up. |
 
 Set `LEGAL` (operator details as JSON, see the comment in `wrangler.jsonc`) as a variable in the Cloudflare dashboard. It fills `/privacy`, `/datenschutz`, `/imprint` and `/impressum`; without it those pages are hidden. `keep_vars` keeps it across deploys.
 
