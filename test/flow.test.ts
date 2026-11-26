@@ -5,10 +5,11 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { createLocalJWKSet, jwtVerify, decodeJwt, type JSONWebKeySet } from "jose";
-import app from "../src/index";
+import app, { AppGateway } from "../src/index";
 import { UNUSED_PATHS, createAuth } from "../src/auth";
 import { cleanup } from "../src/cleanup";
 import type { Env } from "../src/env";
+import { appAddress } from "../src/gateway";
 
 const ORIGIN = "https://stem.test";
 const API = "https://app.test/api";
@@ -408,6 +409,80 @@ describe("stem", () => {
       const o = (await r.json()) as { name: string; metadata: { icao: string } };
       expect(o.name).toBe("Virtual Airline Two");
       expect(o.metadata.icao).toBe("VAT");
+    });
+  });
+
+  describe("app gateway", () => {
+    const gateway = (props: unknown, e: Env = env) => new AppGateway({ ...ctx, props } as never, e);
+    const basic = () => "Basic " + btoa(`${client.client_id}:${client.client_secret}`);
+    const tokenRequest = (headers: Record<string, string> = {}) =>
+      new Request(`${ORIGIN}/api/auth/oauth2/token`, {
+        method: "POST",
+        headers: { authorization: basic(), "content-type": "application/x-www-form-urlencoded", ...headers },
+        body: new URLSearchParams({ grant_type: "client_credentials", scope: "directory", resource: `${ORIGIN}/api/v1` }),
+      });
+
+    it("needs an app in the binding props", async () => {
+      expect((await gateway(undefined).fetch(new Request(`${ORIGIN}/health`))).status).toBe(403);
+      expect((await gateway({ app: "Not An App!" }).fetch(new Request(`${ORIGIN}/health`))).status).toBe(403);
+      await expect(gateway({}).roles()).rejects.toThrow("gateway_needs_app");
+    });
+
+    it("serves the HTTP app, including the token endpoint", async () => {
+      const g = gateway({ app: "demo" });
+      expect((await g.fetch(new Request(`${ORIGIN}/health`))).status).toBe(200);
+      const r = await g.fetch(tokenRequest({ "x-stem-client-ip": "198.51.100.9" }));
+      expect(r.status).toBe(200);
+      const { access_token } = (await r.json()) as { access_token: string };
+      const orgs = await g.fetch(new Request(`${ORIGIN}/api/v1/orgs`, { headers: { authorization: `Bearer ${access_token}` } }));
+      expect(orgs.status).toBe(200);
+      // A token only works for the app the binding names.
+      const other = await gateway({ app: "other" }).fetch(new Request(`${ORIGIN}/api/v1/orgs`, { headers: { authorization: `Bearer ${access_token}` } }));
+      expect(other.status).toBe(403);
+      expect(((await other.json()) as { error: string }).error).toBe("app_mismatch");
+    });
+
+    it("keys rate limits by the end user, or by the app without one", async () => {
+      const keys: string[] = [];
+      const e = { ...env, API_RL: { limit: async ({ key }: { key: string }) => (keys.push(key), { success: true }) } as unknown as RateLimit };
+      await gateway({ app: "demo" }, e).fetch(new Request(`${ORIGIN}/api/v1/roles`, { headers: { "x-stem-client-ip": "198.51.100.10" } }));
+      await gateway({ app: "demo" }, e).fetch(new Request(`${ORIGIN}/api/v1/roles`, { headers: { "x-stem-client-ip": "not an ip" } }));
+      await gateway({ app: "demo" }, e).roles();
+      // Outside the gateway the header means nothing.
+      await new Browser(e, "203.0.113.99").fetch("/api/v1/roles", { headers: { "x-stem-client-ip": "198.51.100.11" } });
+      const demo = await appAddress("demo");
+      expect(keys).toEqual(["198.51.100.10", demo, demo, "203.0.113.99"]);
+      expect(demo).not.toBe(await appAddress("other"));
+    });
+
+    it("offers the directory as typed methods, scoped to the app", async () => {
+      const g = gateway({ app: "demo" });
+      expect(await g.roles()).toContain("pilot");
+      expect((await g.listOrgs()).map((o) => o.id)).toEqual([orgId]);
+      expect((await g.getOrg(orgId))?.name).toBe("Virtual Airline Two");
+      const other = ((await (await op(browser, "/orgs?app=other")).json()) as { data: { id: string }[] }).data[0];
+      expect(await g.getOrg(other.id)).toBeNull();
+      await expect(g.listMembers(other.id)).rejects.toMatchObject({ status: 404, code: "not_found" });
+
+      const added = await g.addMember(orgId, { email: "gateway@example.com", role: "dispatcher" });
+      expect(added.role).toBe("dispatcher");
+      expect((await g.setMemberRole(orgId, added.user_id, "pilot")).role).toBe("pilot");
+      expect((await g.getUser(added.user_id))?.email).toBe("gateway@example.com");
+      const members = await g.listMembers(orgId, { limit: 1 });
+      expect(members.data.length).toBe(1);
+      expect(members.total).toBe(3);
+      await g.removeMember(orgId, added.user_id);
+      expect(await g.getUser(added.user_id)).toBeNull();
+
+      const inv = await g.invite(orgId, { email: "later@example.com", role: "pilot" });
+      expect((await g.listInvitations(orgId)).map((i) => i.id)).toContain(inv.id);
+      await g.cancelInvitation(orgId, inv.id);
+      expect((await g.listInvitations(orgId, "canceled")).map((i) => i.id)).toContain(inv.id);
+      expect((await g.updateOrg(orgId, { metadata: { icao: "VAG" } })).metadata.icao).toBe("VAG");
+    });
+
+    it("refuses apps without an enabled client", async () => {
+      await expect(gateway({ app: "nobody" }).listOrgs()).rejects.toMatchObject({ status: 403, code: "client_has_no_app" });
     });
   });
 });

@@ -3,6 +3,8 @@
 // - /api/v1/operator/*: the person running stem sets up apps, OAuth clients and organizations (OPERATOR_TOKEN).
 // - /api/v1/*: an app manages its own organizations, members and invitations with a client-credentials
 //   access token (scope "directory"). An app only ever sees organizations whose `app` matches its client.
+//   App Workers can make the same calls as typed methods on the app gateway (src/gateway.ts), which
+//   names the app in its binding props instead of a token.
 import { Hono, type Context } from "hono";
 import { jwtVerify, createLocalJWKSet, type JSONWebKeySet } from "jose";
 import type { Env } from "./env";
@@ -11,6 +13,7 @@ import { isRole, roleNames } from "./roles";
 import { inviteMail, sendMail } from "./email";
 import { timingSafeEqual } from "./util";
 import { chunks } from "./claims";
+import { gatewayOf } from "./gateway";
 
 type Vars = { auth: Auth; app: string; clientId: string };
 type C = Context<{ Bindings: Env; Variables: Vars }>;
@@ -155,6 +158,17 @@ export function apiRoutes() {
   // ---------- directory (per app) ----------
   const dir = new Hono<{ Bindings: Env; Variables: Vars }>();
   dir.use("*", async (c, next) => {
+    const gateway = gatewayOf(c.env);
+    if (gateway?.rpc) {
+      // Gateway methods: the app comes from the caller's binding props. It still needs an enabled client,
+      // so disabling an app's clients cuts off its gateway calls too.
+      const clients = await (await adapter(c)).findMany<{ clientId: string; disabled?: boolean; metadata?: unknown }>({ model: "oauthClient", limit: 100 });
+      const client = clients.find((cl) => !cl.disabled && asJson(cl.metadata).app === gateway.app);
+      if (!client) return err(c, 403, "client_has_no_app");
+      c.set("app", gateway.app);
+      c.set("clientId", client.clientId);
+      return next();
+    }
     const token = (c.req.header("authorization") || "").replace(/^Bearer\s+/i, "");
     if (!token) return err(c, 401, "unauthorized");
     let clientId: string;
@@ -171,6 +185,8 @@ export function apiRoutes() {
     const client = await (await adapter(c)).findOne<{ disabled?: boolean; metadata?: unknown }>({ model: "oauthClient", where: [{ field: "clientId", value: clientId }] });
     const app = client && !client.disabled ? asJson(client.metadata).app : null;
     if (typeof app !== "string" || !app) return err(c, 403, "client_has_no_app");
+    // Through the gateway, a token only works for the app named in the binding.
+    if (gateway && gateway.app !== app) return err(c, 403, "app_mismatch");
     c.set("app", app);
     c.set("clientId", clientId);
     await next();
