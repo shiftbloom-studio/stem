@@ -60,6 +60,9 @@ Access tokens are EdDSA (Ed25519) JWTs with `typ: at+jwt`, valid for 10 minutes.
 | `email`, `email_verified` | With the `email` scope. Signing in with a code always verifies the address. |
 | `name` | With the `profile` scope. |
 | `orgs` | With the `orgs` scope: `{ "<organization id>": "<role>" }` for every organization of your app the user belongs to. Empty object when they belong to none. |
+| `auth_method` | How the person signed in to stem for this session: `passkey`, `email_code`, or `unknown` (sessions from before stem recorded it, or a session that has ended). Also in the ID token. See [Sign-in strength and step-up](#sign-in-strength-and-step-up). |
+| `passkey_synced` | Only with `auth_method: passkey`. `true` for a passkey that syncs between devices (iCloud Keychain, Google Password Manager, most password managers), `false` for one bound to a single device or security key. |
+| `signed_in_at` | When that sign-in happened, in seconds since the epoch. The same moment as the ID token's `auth_time`, which access tokens can't carry. |
 
 There is no "active organization" in the token. The app decides which organization a request is about (for example from the URL) and checks `orgs[thatId]`. Role changes show up at the next refresh, so within 10 minutes.
 
@@ -71,6 +74,27 @@ const JWKS = createRemoteJWKSet(new URL("https://stem.example.com/api/auth/jwks"
 const { payload } = await jwtVerify(token, JWKS, { issuer: "https://stem.example.com", audience: "https://www.my-app.example/api", typ: "at+jwt" });
 const role = (payload.orgs as Record<string, string> | undefined)?.[tenant.authOrgId];
 ```
+
+## Sign-in strength and step-up
+
+An email code proves someone can read the inbox. A passkey proves they hold the device and passed its PIN or biometric check, and it can't be phished. Tokens say which one happened, so an app can ask for more before an action that matters, for example changing roles or deleting a team.
+
+The claims follow the stem session: a token refreshed later still says how that session started. Treat anything other than `passkey` the same as an email code.
+
+To require a recent passkey before an action:
+
+1. Check the access token: `auth_method === "passkey"` and `now - signed_in_at` within your limit (for example 10 minutes).
+2. If either fails, send the person through the authorization flow again with `prompt=login` (or `max_age=<seconds>`), and come back to the action afterwards. Optionally add `acr_values=phr` to say you want a phishing-resistant sign-in.
+3. stem asks them to confirm. If they're signed in and have a passkey, the page offers it first and keeps the email code as a fallback, so a lost device never locks anyone out.
+4. Check the new token again, and that its `sub` is the same person. If they used a code, the action stays blocked; tell them to add a passkey on their stem account page.
+
+```ts
+const STEP_UP_SECONDS = 600;
+const fresh = typeof payload.signed_in_at === "number" && Date.now() / 1000 - payload.signed_in_at <= STEP_UP_SECONDS;
+if (payload.auth_method !== "passkey" || !fresh) return redirectToStemSignIn({ prompt: "login", acr_values: "phr", returnTo: request.url });
+```
+
+Apps that don't read these claims see no change. The standard `acr` stays `"0"` and `amr` isn't set for now: Better Auth owns those values, and `acr_values` is a hint stem uses for the page, not a guarantee. The decision is always the app's, based on `auth_method`.
 
 ## 4. Directory API
 

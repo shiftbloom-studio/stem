@@ -8,7 +8,8 @@ import { apiRoutes } from "./api";
 import { handleFonts } from "./assets";
 import { faviconSvg } from "./bloom";
 import { robotsTxt, parseLegal, safeNext } from "./util";
-import { landingPage, signInPage, accountPage, consentPage, invitePage, messagePage, type Ui } from "./ui/pages";
+import { landingPage, signInPage, accountPage, consentPage, invitePage, messagePage, type Ui, type StepUp } from "./ui/pages";
+import { wantsStepUp } from "./strength";
 import { legalPage, LEGAL_PATHS } from "./ui/legal";
 import { cleanup } from "./cleanup";
 
@@ -115,7 +116,18 @@ app.get("/sign-in", async (c) => {
     const client = await ctx.adapter.findOne<{ name?: string }>({ model: "oauthClient", where: [{ field: "clientId", value: clientId }] });
     clientName = client?.name || null;
   }
-  const res = html(signInPage(ui(c.env), clientName));
+  // The app asked the person to sign in again (prompt=login, max_age or a passkey acr_values).
+  // If they're signed in here and have a passkey, offer it first. The email code stays as fallback.
+  let stepUp: StepUp | null = null;
+  if (oauth && wantsStepUp(url.searchParams)) {
+    const s = await session(c.env, c.req.raw, c.executionCtx as never);
+    if (s) {
+      const ctx = await createAuth(c.env, c.executionCtx as never).$context;
+      const pk = await ctx.adapter.findOne<{ id: string }>({ model: "passkey", where: [{ field: "userId", value: s.user.id }] });
+      if (pk) stepUp = { email: s.user.email };
+    }
+  }
+  const res = html(signInPage(ui(c.env), clientName, stepUp));
   res.headers.set("referrer-policy", "no-referrer");
   return res;
 });

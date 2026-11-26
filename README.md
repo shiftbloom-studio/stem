@@ -15,7 +15,7 @@ It runs on a single Cloudflare Worker.
 - **Passwordless sign-in.** Passkeys first, codes by email as the fallback. The first confirmed code creates the account. After that, stem offers to add a passkey once.
 - **Accounts people can manage.** Change your name, add and remove passkeys, see every signed-in device and end any of them, see which apps have access and remove them, download your data as JSON, delete your account.
 - **Teams per app.** Organizations belong to one app. Members have a role (`owner`, `admin`, `member`, plus any roles the operator adds, like `dispatcher` or `pilot`). Invitations go out by email and are accepted on stem.
-- **OpenID Connect for apps.** Authorization code flow with PKCE, rotating refresh tokens, RP-initiated logout, discovery and JWKS. Access tokens are EdDSA-signed JWTs for the app's API (RFC 8707 resource indicators) and carry an `orgs` claim with the person's teams in that app.
+- **OpenID Connect for apps.** Authorization code flow with PKCE, rotating refresh tokens, RP-initiated logout, discovery and JWKS. Access tokens are EdDSA-signed JWTs for the app's API (RFC 8707 resource indicators) and carry an `orgs` claim with the person's teams in that app, plus how they signed in (`auth_method`), so an app can ask for a fresh passkey before admin actions.
 - **A directory API for app servers.** Invitations, members, roles and team details, authorized with the app's own client credentials. An app only ever sees its own teams.
 
 How an app plugs in is described in [docs/integration.md](docs/integration.md).
