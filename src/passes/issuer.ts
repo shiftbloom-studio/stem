@@ -41,7 +41,7 @@ async function query<T>(db: Db, q: string, ...params: (string | number)[]): Prom
 
 // ---------- keys ----------
 
-type KeyRow = { id: string; statement: string; epoch: string; tokenKey: string; privateKey: string };
+type KeyRow = { id: string; statement: string; epoch: string; tokenKey: string; privateKey: string; wrap: string };
 export type TokenKey = { id: Uint8Array; idB64: string; epoch: string; tokenKey: Uint8Array; notBefore: number; notAfter: number };
 
 const wrapKeys = new Map<string, Promise<CryptoKey>>();
@@ -61,6 +61,23 @@ async function seal(secret: string, data: Uint8Array, aad: string) {
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: new TextEncoder().encode(aad) }, await wrapKey(secret), data));
   return `v1.${b64u(iv)}.${b64u(ct)}`;
 }
+const tags = new Map<string, Promise<string>>();
+/**
+ * Which BETTER_AUTH_SECRET sealed a key, without storing anything about the secret itself. After the
+ * secret changes, older keys can't be opened, so the day gets a new key; the old one stays listed so
+ * passes already handed out keep working.
+ */
+function wrapTag(secret: string) {
+  let t = tags.get(secret);
+  if (!t) {
+    t = crypto.subtle
+      .importKey("raw", new TextEncoder().encode(secret), "HKDF", false, ["deriveBits"])
+      .then((ikm) => crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: new TextEncoder().encode("stem-passes"), info: new TextEncoder().encode("key-tag-v1") }, ikm, 96))
+      .then((b) => b64u(new Uint8Array(b)));
+    tags.set(secret, t);
+  }
+  return t;
+}
 async function open(secret: string, sealed: string, aad: string) {
   const [v, iv, ct] = sealed.split(".");
   if (v !== "v1" || !iv || !ct) throw new Error("unknown key format");
@@ -75,22 +92,25 @@ const toTokenKey = (r: KeyRow): TokenKey => {
 /** Today's key, made on first use. Two isolates racing both generate one; the first insert wins. */
 async function currentKey(env: Env, now: number): Promise<KeyRow> {
   const epoch = epochOf(now);
-  const find = () => query<KeyRow>(env.DB, `select "id", "statement", "epoch", "tokenKey", "privateKey" from "passIssuerKey" where "statement" = ?1 and "epoch" = ?2`, STATEMENT, epoch);
+  const wrap = await wrapTag(env.BETTER_AUTH_SECRET);
+  const find = () => query<KeyRow>(env.DB, `select "id", "statement", "epoch", "tokenKey", "privateKey", "wrap" from "passIssuerKey" where "statement" = ?1 and "epoch" = ?2 and "wrap" = ?3`, STATEMENT, epoch, wrap);
   const [row] = await find();
   if (row) return row;
   const { pkcs8, tokenKey } = await generateTokenKey();
   const id = b64u(await sha256(tokenKey));
-  await query(env.DB, `insert into "passIssuerKey" ("id", "statement", "epoch", "tokenKey", "privateKey", "createdAt") values (?1, ?2, ?3, ?4, ?5, ?6) on conflict do nothing`, id, STATEMENT, epoch, b64u(tokenKey), await seal(env.BETTER_AUTH_SECRET, pkcs8, id), now);
+  await query(env.DB, `insert into "passIssuerKey" ("id", "statement", "epoch", "tokenKey", "privateKey", "wrap", "createdAt") values (?1, ?2, ?3, ?4, ?5, ?6, ?7) on conflict do nothing`, id, STATEMENT, epoch, b64u(tokenKey), await seal(env.BETTER_AUTH_SECRET, pkcs8, id), wrap, now);
   const [won] = await find();
   if (!won) throw new Error("could not store the pass key");
   return won;
 }
 
-/** Keys apps should accept right now, newest first: today's and yesterday's. */
+/** Keys apps should accept right now, newest first: today's and yesterday's (more after a secret change). */
 export async function activeKeys(env: Env, now = Date.now()): Promise<TokenKey[]> {
   await currentKey(env, now);
-  const rows = await query<KeyRow>(env.DB, `select "id", "statement", "epoch", "tokenKey", "privateKey" from "passIssuerKey" where "statement" = ?1 and "epoch" in (?2, ?3) order by "epoch" desc`, STATEMENT, epochOf(now), epochOf(now - DAY_MS));
-  return rows.map(toTokenKey);
+  const rows = await query<KeyRow>(env.DB, `select "id", "statement", "epoch", "tokenKey", "privateKey", "wrap" from "passIssuerKey" where "statement" = ?1 and "epoch" in (?2, ?3) order by "epoch" desc, "createdAt" desc`, STATEMENT, epochOf(now), epochOf(now - DAY_MS));
+  // The key this stem signs with comes first: that's the one pages blind for.
+  const wrap = await wrapTag(env.BETTER_AUTH_SECRET);
+  return [...rows.filter((r) => r.wrap === wrap && r.epoch === epochOf(now)), ...rows.filter((r) => !(r.wrap === wrap && r.epoch === epochOf(now)))].map(toTokenKey);
 }
 
 const signers = new Map<string, Promise<PrivateKey>>();
@@ -152,9 +172,11 @@ function parseRequest(b: Uint8Array, key: TokenKey) {
 export async function issue(env: Env, userId: string, keyId: string | null, requests: Uint8Array[], now = Date.now()) {
   if (!requests.length || requests.length > MAX_BATCH) throw new PassError(400, "bad_request", `Ask for 1 to ${MAX_BATCH} passes at a time.`);
   await currentKey(env, now);
-  const rows = await query<KeyRow>(env.DB, `select "id", "statement", "epoch", "tokenKey", "privateKey" from "passIssuerKey" where "statement" = ?1 and "epoch" in (?2, ?3) order by "epoch" desc`, STATEMENT, epochOf(now), epochOf(now - DAY_MS));
+  const rows = await query<KeyRow>(env.DB, `select "id", "statement", "epoch", "tokenKey", "privateKey", "wrap" from "passIssuerKey" where "statement" = ?1 and "epoch" in (?2, ?3) order by "epoch" desc, "createdAt" desc`, STATEMENT, epochOf(now), epochOf(now - DAY_MS));
   // Without a key id (the plain RFC 9578 request), the truncated id in the request decides, newest key first.
-  const row = keyId ? rows.find((r) => r.id === keyId) : rows.find((r) => unb64u(r.id)[31] === requests[0][2]);
+  const wrap = await wrapTag(env.BETTER_AUTH_SECRET);
+  const mine = rows.filter((r) => r.wrap === wrap);
+  const row = keyId ? mine.find((r) => r.id === keyId) : mine.find((r) => unb64u(r.id)[31] === requests[0][2]);
   if (!row) throw new PassError(400, "unknown_key", "That key isn't in use anymore. Fetch the current one and try again.");
   const key = toTokenKey(row);
   const blinded = requests.map((r) => parseRequest(r, key));

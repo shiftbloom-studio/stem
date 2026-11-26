@@ -262,6 +262,26 @@ describe("passes", () => {
     expect((await fetchPasses(b, 1, { keyId: before.key["stem-key-id"] })).body.error).toBe("unknown_key");
   });
 
+  it("starts a new key when BETTER_AUTH_SECRET changes and keeps the old one listed", async () => {
+    const e = makeEnv();
+    const b = await signIn(e, "rotate@example.com");
+    b.origin = APP;
+    const before = await fetchPasses(b, 1);
+    expect(before.tokens).toHaveLength(1);
+    e.BETTER_AUTH_SECRET = randomBytes(32).toString("base64url");
+    // Sessions don't survive a new secret either.
+    const b2 = await signIn(e, "rotate2@example.com");
+    b2.origin = APP;
+    const dir = await (await b2.fetch("/.well-known/private-token-issuer-directory")).json() as Record<string, any>;
+    expect(dir["token-keys"]).toHaveLength(2);
+    expect(dir["token-keys"][1]["token-key"]).toBe(before.key["token-key"]);
+    // The old key can't be opened anymore, so it doesn't sign; the new one does.
+    expect((await fetchPasses(b2, 1, { keyIndex: 1 })).body.error).toBe("unknown_key");
+    const after = await fetchPasses(b2, 1);
+    expect(after.res.status).toBe(200);
+    expect(await verifies(after.key["token-key"], after.tokens[0])).toBe(true);
+  });
+
   it("keeps private keys encrypted at rest", async () => {
     const rows = (env.DB as unknown as DatabaseSync).prepare(`select "privateKey" from "passIssuerKey"`).all() as { privateKey: string }[];
     expect(rows.length).toBeGreaterThan(0);
