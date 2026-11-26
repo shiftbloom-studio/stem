@@ -1,0 +1,18 @@
+# Changes to these paths need a review from the code owner before merge.
+# Everything else can be merged once CI is green.
+
+# CI, workflows and repository settings (including this file)
+/.github/ @fabianzimber
+
+# Deploy config and database migrations
+wrangler.* @fabianzimber
+migrations/ @fabianzimber
+
+# Repository-specific sensitive paths
+/src/auth.ts @fabianzimber
+/src/claims.ts @fabianzimber
+/src/roles.ts @fabianzimber
+/src/gateway.ts @fabianzimber
+/src/api.ts @fabianzimber
+/src/limits.ts @fabianzimber
+/src/account.ts @fabianzimber
