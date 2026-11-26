@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // The Better Auth instance behind stem. One instance per isolate and environment.
 import { betterAuth } from "better-auth";
+import { usageEvents } from "./analytics";
 import { createAuthMiddleware, APIError, getSessionFromCtx } from "better-auth/api";
 import { emailLimits, CODE_LIFETIME_MS } from "./limits";
 import { accountTools } from "./account";
@@ -165,6 +166,7 @@ export function createAuth(env: Env, exec?: Exec) {
       mandates(env),
       coarseSessions(env),
       sealedTokens(env),
+      usageEvents(env, exec),
       passkeyNotice(env, (mail) => background(exec, sendMail(env, mail))),
       emailOTP({
         otpLength: 6,
