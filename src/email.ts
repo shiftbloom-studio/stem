@@ -6,9 +6,15 @@ export type Mail = { to: string; subject: string; text: string; html: string };
 
 /** "stem <login@example.com>" → { name, email }. A bare address works too. */
 export function parseFrom(raw: string): { email: string; name: string } | string {
-  const m = /^\s*(.*?)\s*<([^<>\s]+@[^<>\s]+)>\s*$/.exec(raw);
-  if (m) return m[1] ? { name: m[1].replace(/^"|"$/g, ""), email: m[2] } : m[2];
-  return raw.trim();
+  // Plain string scanning instead of one backtracking regex, so long inputs stay linear.
+  const s = raw.trim();
+  const lt = s.lastIndexOf("<");
+  if (lt < 0 || !s.endsWith(">")) return s;
+  const email = s.slice(lt + 1, -1);
+  const name = s.slice(0, lt).trim();
+  // The address: no spaces or angle brackets, and an "@" with something on both sides.
+  if (!/^[^<>\s]+$/.test(email) || !email.slice(1, -1).includes("@") || /[\n\r\u2028\u2029]/.test(name)) return s;
+  return name ? { name: name.replace(/^"|"$/g, ""), email } : email;
 }
 
 /** Local development: STEM_URL points at this machine. */

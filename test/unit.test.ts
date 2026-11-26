@@ -17,6 +17,15 @@ describe("safeNext", () => {
 describe("parseFrom", () => {
   it("splits name and address", () => expect(parseFrom("stem <login@example.com>")).toEqual({ name: "stem", email: "login@example.com" }));
   it("takes a bare address", () => expect(parseFrom("login@example.com")).toBe("login@example.com"));
+  it("strips quotes around the name", () => expect(parseFrom('"stem login" <login@example.com>')).toEqual({ name: "stem login", email: "login@example.com" }));
+  it("takes an address in brackets without a name", () => expect(parseFrom(" <login@example.com> ")).toBe("login@example.com"));
+  it("leaves malformed input as it is", () => expect(parseFrom("stem <not an address>")).toBe("stem <not an address>"));
+  it("stays fast on long hostile input", () => {
+    const raw = "a" + " ".repeat(50_000) + "<";
+    const t = performance.now();
+    expect(parseFrom(raw)).toBe(raw.trim());
+    expect(performance.now() - t).toBeLessThan(100);
+  });
 });
 
 describe("sendMail", () => {
