@@ -16,6 +16,7 @@ It runs on a single Cloudflare Worker.
 - **Accounts people can manage.** Change your name, add and remove passkeys, see every signed-in device and end any of them, see which apps have access and remove them, download your data as JSON, delete your account.
 - **Teams per app.** Organizations belong to one app. Members have a role (`owner`, `admin`, `member`, plus any roles the operator adds, like `dispatcher` or `pilot`). Invitations go out by email and are accepted on stem.
 - **OpenID Connect for apps.** Authorization code flow with PKCE, rotating refresh tokens, RP-initiated logout, discovery and JWKS. Access tokens are EdDSA-signed JWTs for the app's API (RFC 8707 resource indicators) and carry an `orgs` claim with the person's teams in that app, plus how they signed in (`auth_method`), so an app can ask for a fresh passkey before admin actions.
+- **Mandates for agents.** Your passkey signs the exact rights an agent gets. The agent hands narrower copies to sub-agents without calling stem, apps check the whole chain back to your signature, and one stop button on your account page ends every branch. See [docs/mandates.md](docs/mandates.md).
 - **A directory API for app servers.** Invitations, members, roles and team details, authorized with the app's own client credentials. An app only ever sees its own teams.
 
 How an app plugs in is described in [docs/integration.md](docs/integration.md).
@@ -55,10 +56,11 @@ If `BETTER_AUTH_SECRET` leaks, replace it too (`npx wrangler secret put BETTER_A
 | `src/api.ts` | Operator API (`/api/v1/operator/*`) and the per-app directory API (`/api/v1/*`). |
 | `src/index.ts` | Hono app: pages, discovery, security headers, rate limits. |
 | `src/ui/` | Server-rendered pages and the privacy policy and imprint in English and German. |
+| `src/mandates/` | Mandates: the `mandates()` plugin, the verifier apps run, the `Mandate` Durable Object and the `MandateGateway` entrypoint. |
 | `src/client/app.ts` | Browser code for the pages, bundled to `public/assets/app.js`. |
 | `migrations/` | D1 schema. `npm run db:schema` prints what the Better Auth config needs; a test fails when they drift apart. |
 
-Storage is one D1 database. Email goes out through Cloudflare Email Service.
+Storage is one D1 database, plus one SQLite-backed Durable Object per mandate. Email goes out through Cloudflare Email Service.
 
 ## Privacy and GDPR
 
@@ -99,6 +101,7 @@ Deploy settings (`.env.deploy`, or build variables in Workers Builds):
 | `ORG_ROLES` | Optional. Extra team roles, comma separated. |
 | `RESOURCES` | Optional. APIs that get JWT access tokens, comma separated absolute URIs. |
 | `TURNSTILE_SITE_KEY` | Optional. Turnstile widget for "email me a code". Needs the `TURNSTILE_SECRET` secret. |
+| `MANDATE_APPS` | Optional. Apps that take mandates and their actions, as JSON. Empty turns mandates off. See [docs/mandates.md](docs/mandates.md). |
 
 Set `LEGAL` (operator details as JSON, see the comment in `wrangler.jsonc`) as a variable in the Cloudflare dashboard. It fills `/privacy`, `/datenschutz`, `/imprint` and `/impressum`; without it those pages are hidden. `keep_vars` keeps it across deploys.
 

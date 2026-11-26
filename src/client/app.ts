@@ -4,6 +4,7 @@ import { createAuthClient } from "better-auth/client";
 import { emailOTPClient, organizationClient } from "better-auth/client/plugins";
 import { passkeyClient } from "@better-auth/passkey/client";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
+import { approveMandate, loadAgents } from "./mandates";
 
 const client = createAuthClient({
   basePath: "/api/auth",
@@ -365,7 +366,7 @@ async function account() {
     location.assign("/");
   });
 
-  await Promise.all([loadPasskeys(), loadSessions(), loadOrgs(), loadApps()]);
+  await Promise.all([loadPasskeys(), loadSessions(), loadOrgs(), loadApps(), loadAgents(mandateHelpers)]);
 }
 
 // ---------- consent ----------
@@ -423,5 +424,6 @@ async function landing() {
   document.querySelectorAll<HTMLElement>("[data-when]").forEach((el) => { el.hidden = (el.dataset.when === "in") !== inside; });
 }
 
-const pages: Record<string, () => unknown> = { "sign-in": signIn, account, consent, invite, landing };
+const mandateHelpers = { $fetch: client.$fetch as never, $, fail, busy, li, fmt };
+const pages: Record<string, () => unknown> = { "sign-in": signIn, account, consent, invite, landing, mandate: () => approveMandate(mandateHelpers) };
 pages[document.body.dataset.page || ""]?.();

@@ -13,6 +13,10 @@ import { wantsStepUp } from "./strength";
 import { legalPage, LEGAL_PATHS } from "./ui/legal";
 import { cleanup } from "./cleanup";
 import { createGateway } from "./gateway";
+import { Mandate } from "./mandates/object";
+import { MandateGatewayBase, authorize } from "./mandates/authorize";
+import { approvePage, answeredPage } from "./mandates/page";
+import { mandateApps, mandatesEnabled, type RequestRow, type RequestTerms } from "./mandates/plugin";
 
 const TURNSTILE = "https://challenges.cloudflare.com";
 const CSP = [
@@ -38,6 +42,7 @@ const ui = (env: Env): Ui => ({
   legal: !!parseLegal(env.LEGAL),
   turnstileSiteKey: env.TURNSTILE_SITE_KEY && env.TURNSTILE_SECRET ? env.TURNSTILE_SITE_KEY : null,
   origin: new URL(env.STEM_URL).origin,
+  mandates: mandatesEnabled(env),
 });
 
 const html = (body: string, status = 200, cache = "no-store") =>
@@ -181,6 +186,36 @@ app.get("/invite/:id/continue", async (c) => {
   return c.redirect("/account", 302);
 });
 
+// ---------- mandates (docs/mandates.md) ----------
+
+app.get("/mandates/approve", async (c) => {
+  const url = new URL(c.req.url);
+  if (!mandatesEnabled(c.env)) return html(messagePage(ui(c.env), "Not here", "This page doesn't exist."), 404);
+  const s = await session(c.env, c.req.raw, c.executionCtx as never);
+  if (!s) return c.redirect(`/sign-in?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
+  const ctx = await createAuth(c.env, c.executionCtx as never).$context;
+  const id = url.searchParams.get("request") || "";
+  const row = /^[0-9a-f-]{36}$/i.test(id) ? await ctx.adapter.findOne<RequestRow>({ model: "mandateRequest", where: [{ field: "id", value: id }] }) : null;
+  const open = row && row.status === "pending" && new Date(row.expiresAt).getTime() > Date.now() && (!row.userId || row.userId === s.user.id);
+  const pk = await ctx.adapter.findOne<{ id: string }>({ model: "passkey", where: [{ field: "userId", value: s.user.id }] });
+  const res = html(approvePage(ui(c.env), open ? { id: row.id, userCode: row.userCode, terms: JSON.parse(row.terms) as RequestTerms, expiresAt: row.expiresAt } : null, mandateApps(c.env), !!pk), open ? 200 : 404);
+  res.headers.set("referrer-policy", "no-referrer");
+  return res;
+});
+
+app.get("/mandates/done", (c) => html(answeredPage(ui(c.env))));
+
+/** For apps that can't reach stem through a service binding. Same answer as MandateGateway.authorize. */
+app.post("/api/mandates/authorize", async (c) => {
+  if (c.env.API_RL) {
+    const { success } = await c.env.API_RL.limit({ key: c.req.header("cf-connecting-ip") || "unknown" });
+    if (!success) return c.json({ allowed: false, reason: "rate_limited", message: "Too many requests." }, 429);
+  }
+  const body = await c.req.json().catch(() => null);
+  const r = await authorize(c.env, body);
+  return c.json(r, r.allowed ? 200 : r.reason === "invalid_request" ? 400 : 403);
+});
+
 app.notFound((c) => html(messagePage(ui(c.env), "Not here", "This page doesn't exist. Maybe the link is old or has a typo."), 404));
 app.onError((e, c) => {
   console.error("[stem] unhandled", e);
@@ -201,3 +236,7 @@ export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;
 
 /** Named entrypoint for app Workers on the same account (service binding with entrypoint "AppGateway"). */
 export class AppGateway extends createGateway(app.fetch) {}
+
+/** Mandates: the Durable Object class (binding MANDATE) and the entrypoint apps bind to (entrypoint "MandateGateway"). */
+export { Mandate };
+export class MandateGateway extends MandateGatewayBase {}

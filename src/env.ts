@@ -27,6 +27,10 @@ export interface Env {
   RESOURCES?: string;
   /** Operator details for the imprint and privacy policy, as JSON. Legal pages are hidden when unset. */
   LEGAL?: string;
+  /** Mandates (docs/mandates.md): one Durable Object per root mandate. Without it, mandates are off. */
+  MANDATE?: DurableObjectNamespace<import("./mandates/object").Mandate>;
+  /** Apps that take mandates and their actions, as JSON. See docs/mandates.md. Unset means mandates are off. */
+  MANDATE_APPS?: string;
   /** "true" logs sign-in codes to the console instead of sending them. Only honored when STEM_URL is localhost. */
   DEV_LOG_EMAIL?: string;
 }
