@@ -6,6 +6,8 @@ import { safeNext, parseLegal, robotsTxt } from "../src/util";
 import { parseFrom, sendMail, isLocal } from "../src/email";
 import { roleNames, isRole } from "../src/roles";
 import { createAuth } from "../src/auth";
+import { cleanIp, appAddress, propsApp } from "../src/gateway";
+import { getIP } from "@better-auth/core/utils/ip";
 
 describe("safeNext", () => {
   it("keeps same-origin paths", () => expect(safeNext("/invite/abc?x=1")).toBe("/invite/abc?x=1"));
@@ -55,5 +57,27 @@ describe("schema", () => {
     const auth = createAuth({ STEM_URL: "https://stem.example.com", BETTER_AUTH_SECRET: "s".repeat(40), DB: db } as never);
     const { toBeCreated, toBeAdded } = await getMigrations({ ...auth.options, database: db } as never);
     expect({ toBeCreated: toBeCreated.map((t) => t.table), toBeAdded: toBeAdded.map((t) => t.table) }).toEqual({ toBeCreated: [], toBeAdded: [] });
+  });
+});
+
+describe("app gateway helpers", () => {
+  it("accepts plain IPv4 and IPv6 addresses only", () => {
+    expect(cleanIp("198.51.100.7")).toBe("198.51.100.7");
+    expect(cleanIp(" 2001:db8::1 ")).toBe("2001:db8::1");
+    for (const v of ["", null, "256.1.1.1", "1.2.3.4, 5.6.7.8", "1.2.3.4:80", "[::1]", "example.com", "fd00::/8", "1:2:3:4:5:6:7:8:9"]) expect(cleanIp(v)).toBeNull();
+  });
+  it("gives each app its own /64 that Better Auth reads as a client IP", async () => {
+    const a = await appAddress("demo");
+    expect(a).toMatch(/^fd[0-9a-f]{2}:[0-9a-f]{1,4}:[0-9a-f]{1,4}:[0-9a-f]{1,4}::1$/);
+    expect(await appAddress("demo")).toBe(a);
+    // What Better Auth's rate limiter keys on: the address, cut to its /64.
+    const key = (ip: string) => getIP(new Request("https://stem.test/", { headers: { "cf-connecting-ip": ip } }), { advanced: { ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] } } });
+    expect(key(a)).toMatch(/^fd[0-9a-f]{2}:/);
+    expect(key(await appAddress("other"))).toMatch(/^fd[0-9a-f]{2}:/);
+    expect(key(await appAddress("other"))).not.toBe(key(a));
+  });
+  it("reads the app id from the binding props", () => {
+    expect(propsApp({ app: "my-app" })).toBe("my-app");
+    for (const p of [undefined, null, "my-app", {}, { app: "My App" }, { app: 1 }]) expect(propsApp(p)).toBeNull();
   });
 });

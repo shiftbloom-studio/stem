@@ -124,6 +124,48 @@ The token lasts 5 minutes. Send it as `Authorization: Bearer …` to:
 
 Errors are JSON: `{ "error": "code", "detail"?: "text" }` with a fitting HTTP status.
 
+## 5. App Workers on the same account: the gateway
+
+An app that runs as a Cloudflare Worker on the same account as stem can bind to stem's `AppGateway` entrypoint. The binding names the app in `props`. Cloudflare sets those props from the binding, so stem knows which app is calling without a token or shared secret.
+
+```jsonc
+// The app's wrangler.jsonc
+"services": [
+  { "binding": "IDENTITY", "service": "stem", "entrypoint": "AppGateway", "props": { "app": "my-app" } }
+]
+```
+
+**HTTP.** `env.IDENTITY.fetch(request)` serves everything the public hostname serves (token endpoint, JWKS, directory API). Rate limits through the gateway are kept per person: set `x-stem-client-ip` to the IP of the person you're calling for (for example your own `cf-connecting-ip`). Calls without it, such as background jobs, count against a bucket of their own for your app. Through the gateway, a directory token only works for the app the binding names (`403 app_mismatch` otherwise).
+
+```ts
+const res = await env.IDENTITY.fetch(new Request("https://stem.example.com/api/auth/oauth2/token", {
+  method: "POST",
+  headers: { authorization: basic, "content-type": "application/x-www-form-urlencoded", "x-stem-client-ip": req.headers.get("cf-connecting-ip") ?? "" },
+  body,
+}));
+```
+
+**Typed directory.** The directory API is also available as RPC methods, scoped to the app in `props`, with no client-credentials token. The app still needs at least one enabled client: disabling its clients cuts off these calls too. Results have the same shapes as the HTTP API.
+
+| Method | HTTP equivalent |
+| --- | --- |
+| `roles()` | `GET /api/v1/roles` (returns the array) |
+| `listOrgs()` | `GET /api/v1/orgs` (returns the array) |
+| `getOrg(orgId)` | `GET /api/v1/orgs/:id`, `null` when not found |
+| `updateOrg(orgId, { name?, logo?, metadata? })` | `PATCH /api/v1/orgs/:id` |
+| `listMembers(orgId, { limit?, offset? })` | `GET /api/v1/orgs/:id/members` |
+| `addMember(orgId, { user_id \| email, role })` | `POST /api/v1/orgs/:id/members` |
+| `setMemberRole(orgId, userId, role)` | `PATCH /api/v1/orgs/:id/members/:userId` |
+| `removeMember(orgId, userId)` | `DELETE /api/v1/orgs/:id/members/:userId` |
+| `listInvitations(orgId, status = "pending")` | `GET /api/v1/orgs/:id/invitations` (returns the array) |
+| `invite(orgId, { email, role?, inviter_id?, redirect_to?, expires_in_days? })` | `POST /api/v1/orgs/:id/invitations` |
+| `cancelInvitation(orgId, invitationId)` | `DELETE /api/v1/orgs/:id/invitations/:invId` |
+| `getUser(userId)` | `GET /api/v1/users/:id`, `null` when not found |
+
+A failed call throws an error whose message starts with the HTTP API's error code, for example `not_found` or `invalid_role: …`.
+
+A plain service binding without `entrypoint` keeps working exactly as before.
+
 ## Things to know
 
 - `sub` is the same for a person across all apps on one stem. Don't treat it as a secret.

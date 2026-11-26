@@ -12,6 +12,7 @@ import { landingPage, signInPage, accountPage, consentPage, invitePage, messageP
 import { wantsStepUp } from "./strength";
 import { legalPage, LEGAL_PATHS } from "./ui/legal";
 import { cleanup } from "./cleanup";
+import { createGateway } from "./gateway";
 
 const TURNSTILE = "https://challenges.cloudflare.com";
 const CSP = [
@@ -197,3 +198,6 @@ async function scheduled(_event: ScheduledController, env: Env, ctx: ExecutionCo
 }
 
 export default { fetch: app.fetch, scheduled } satisfies ExportedHandler<Env>;
+
+/** Named entrypoint for app Workers on the same account (service binding with entrypoint "AppGateway"). */
+export class AppGateway extends createGateway(app.fetch) {}

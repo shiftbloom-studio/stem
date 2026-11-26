@@ -40,6 +40,30 @@ async function busy<T>(btn: HTMLButtonElement | null, fn: () => Promise<T>): Pro
 }
 
 const passkeysSupported = () => typeof window.PublicKeyCredential === "function";
+
+// WebAuthn Signal API (Chrome 132+, others to follow): tells the password manager what the server knows,
+// so it can hide passkeys we no longer accept and show the current email and name. Best effort only.
+type PasskeySignals = {
+  isConditionalMediationAvailable?: () => Promise<boolean>;
+  signalUnknownCredential?: (o: { rpId: string; credentialId: string }) => Promise<void>;
+  signalCurrentUserDetails?: (o: { rpId: string; userId: string; name: string; displayName: string }) => Promise<void>;
+};
+const pkApi = () => (passkeysSupported() ? (window.PublicKeyCredential as unknown as PasskeySignals) : undefined);
+async function signal<K extends "signalUnknownCredential" | "signalCurrentUserDetails">(kind: K, args: Parameters<NonNullable<PasskeySignals[K]>>[0]) {
+  const api = pkApi();
+  const fn = api?.[kind] as ((a: typeof args) => Promise<void>) | undefined;
+  if (typeof fn !== "function") return;
+  // Never hold up a sign-in for this.
+  await Promise.race([fn.call(api, args).catch(() => {}), new Promise((r) => setTimeout(r, 1000))]);
+}
+/** The credential is gone on our side: the password manager can stop offering it. */
+const forgetCredential = (credentialId: string) => signal("signalUnknownCredential", { rpId: location.hostname, credentialId });
+
+type PasskeySignIn = {
+  data: unknown;
+  error: { code?: string; message?: string; status?: number } | null;
+  webauthn?: { response: { id: string; response: { userHandle?: string } } };
+};
 const next = () => {
   const n = new URLSearchParams(location.search).get("next") || "/account";
   // Same rules as safeNext on the server. Control characters matter: the URL parser drops tabs and
@@ -90,17 +114,59 @@ function signIn() {
     location.assign(target);
   }
 
+  /** Handles the result of a passkey sign-in, from the button or from autofill. True when signed in. */
+  async function afterPasskey(res: PasskeySignIn): Promise<boolean> {
+    const wa = res.webauthn;
+    if (res.error) {
+      if (res.error.code === "PASSKEY_NOT_FOUND") {
+        // Deleted on the account page, or with the account: hide it in the password manager.
+        if (wa?.response.id) await forgetCredential(wa.response.id);
+        fail("That passkey isn't linked to a stem account anymore. Get a code by email instead.");
+        return false;
+      }
+      const cancelled = res.error.status === 400 && /cancel|abort|NotAllowed/i.test(res.error.message || "");
+      if (!cancelled) fail(explain(res.error as ApiError, "That didn't work. Try again, or get a code by email."));
+      return false;
+    }
+    target = destination(res.data);
+    // Keep the email address and name in the password manager current, also for passkeys made
+    // before the email was their user name. Our user handles are per passkey, so this only touches this one.
+    const handle = wa?.response.response.userHandle;
+    if (handle && pkApi()?.signalCurrentUserDetails) {
+      const s = await client.getSession();
+      const u = s.data?.user;
+      if (u?.email) await signal("signalCurrentUserDetails", { rpId: location.hostname, userId: handle, name: u.email, displayName: u.name?.trim() || u.email });
+    }
+    location.assign(target);
+    return true;
+  }
+
+  // Conditional UI: saved passkeys show up in the email field's autofill list. Runs until the person
+  // picks one, presses the passkey button (which cancels it) or leaves the page.
+  let autofillRunning = false;
+  async function passkeyAutofill() {
+    if (autofillRunning) return;
+    const api = pkApi();
+    if (!api?.isConditionalMediationAvailable) return;
+    try { if (!(await api.isConditionalMediationAvailable())) return; } catch { return; }
+    autofillRunning = true;
+    try {
+      const res = (await client.signIn.passkey({ autoFill: true, returnWebAuthnResponse: true })) as unknown as PasskeySignIn;
+      if (await afterPasskey(res)) return;
+    } finally { autofillRunning = false; }
+  }
+
   const pkBtn = $<HTMLButtonElement>("passkey-btn");
   if (passkeysSupported()) { show(pkBtn); show($("passkey-or")); }
   // An app asked for a fresh passkey: put it under the person's finger. Browsers need a tap to start it.
   if (passkeysSupported() && pkBtn?.dataset.stepUp !== undefined) pkBtn.focus();
   pkBtn?.addEventListener("click", () => busy(pkBtn, async () => {
     fail(null);
-    const res = await client.signIn.passkey();
-    if (res.error) { if (res.error.status !== 400 || !/cancel|abort|NotAllowed/i.test(res.error.message || "")) fail(explain(res.error as ApiError, "That didn't work. Try again, or get a code by email.")); return; }
-    target = destination(res.data);
-    location.assign(target);
+    const res = (await client.signIn.passkey({ returnWebAuthnResponse: true })) as unknown as PasskeySignIn;
+    // Starting this ceremony cancelled the autofill one; offer autofill again if this didn't sign in.
+    if (!(await afterPasskey(res))) void passkeyAutofill();
   }));
+  void passkeyAutofill();
 
   $<HTMLFormElement>("email-form")?.addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -219,7 +285,7 @@ async function account() {
     const ul = $("passkeys"); if (!ul) return;
     ul.replaceChildren();
     const res = await client.passkey.listUserPasskeys();
-    const list = (res.data || []) as { id: string; name?: string | null; createdAt: string | Date; backedUp?: boolean }[];
+    const list = (res.data || []) as { id: string; credentialID?: string; name?: string | null; createdAt: string | Date; backedUp?: boolean }[];
     if (!list.length) { ul.append(li("No passkeys yet", "You sign in with a code by email.")); return; }
     for (const pk of list)
       ul.append(li(pk.name || "Passkey", `Added ${fmt(pk.createdAt)}${pk.backedUp ? " · synced" : ""}`, {
@@ -227,7 +293,9 @@ async function account() {
         run: async () => {
           if (!confirm(`Remove "${pk.name || "this passkey"}"? You can still sign in with a code by email.`)) return;
           const r = await client.passkey.deletePasskey({ id: pk.id });
-          if (r.error) fail(explain(r.error as ApiError)); else loadPasskeys();
+          if (r.error) { fail(explain(r.error as ApiError)); return; }
+          if (pk.credentialID) await forgetCredential(pk.credentialID);
+          loadPasskeys();
         },
       }));
   }
@@ -286,8 +354,10 @@ async function account() {
   $("sign-out")?.addEventListener("click", async () => { await client.signOut(); location.assign("/"); });
   $("delete-account")?.addEventListener("click", async () => {
     if (!confirm("Delete your stem account for good? You'll be signed out of every app that uses stem.")) return;
+    const pks = await client.passkey.listUserPasskeys();
     const r = await client.deleteUser({});
     if (r.error) { fail(explain(r.error as ApiError)); return; }
+    for (const pk of (pks.data || []) as { credentialID?: string }[]) if (pk.credentialID) await forgetCredential(pk.credentialID);
     location.assign("/");
   });
 
