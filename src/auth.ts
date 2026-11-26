@@ -15,6 +15,7 @@ import { timingSafeEqual } from "./util";
 import { authStrength, strengthClaims } from "./strength";
 import { mandates } from "./mandates/plugin";
 import { coarseSessions, isSealedApp, pairwiseSecret, sealedTokens } from "./sealed";
+import { passkeyNotice } from "./passkey-notice";
 
 /** Scopes clients may ask for. `orgs` adds the user's organizations in the client's app to the access token. */
 export const SCOPES: string[] = ["openid", "profile", "email", "offline_access", "orgs"];
@@ -164,6 +165,7 @@ export function createAuth(env: Env, exec?: Exec) {
       mandates(env),
       coarseSessions(env),
       sealedTokens(env),
+      passkeyNotice(env, (mail) => background(exec, sendMail(env, mail))),
       emailOTP({
         otpLength: 6,
         expiresIn: CODE_LIFETIME_MS / 1000,

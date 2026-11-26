@@ -37,12 +37,13 @@ export async function sendMail(env: Env, mail: Mail): Promise<void> {
   await env.EMAIL.send({ from: parseFrom(env.EMAIL_FROM), to: mail.to, subject: mail.subject, text: mail.text, html: mail.html });
 }
 
-const wrap = (title: string, body: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head>
+const IGNORE = "stem is the sign-in for shiftbloom studio apps. If you didn't ask for this email, you can ignore it.";
+const wrap = (title: string, body: string, footer = IGNORE) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title></head>
 <body style="margin:0;background:#ffffff;color:#1A1216;font:16px/1.6 -apple-system,'Segoe UI',Helvetica,Arial,sans-serif">
 <div style="max-width:520px;margin:0 auto;padding:40px 24px">
 <p style="margin:0 0 28px;font-weight:600;font-size:20px;letter-spacing:-.02em">stem<span style="color:#FF2E52">.</span></p>
 ${body}
-<p style="margin:36px 0 0;font-size:13px;color:#6b6266">stem is the sign-in for shiftbloom studio apps. If you didn't ask for this email, you can ignore it.</p>
+<p style="margin:36px 0 0;font-size:13px;color:#6b6266">${esc(footer)}</p>
 </div></body></html>`;
 
 export function codeMail(to: string, code: string, type: string): Mail {
@@ -66,5 +67,20 @@ export function inviteMail(to: string, orgName: string, inviter: string | null, 
     html: wrap(`Join ${orgName}`, `<p style="margin:0 0 20px">${esc(who)} to join <strong>${esc(orgName)}</strong>.</p>
 <p style="margin:0 0 20px"><a href="${esc(url)}" style="display:inline-block;background:#FF2E52;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:999px">Accept the invitation</a></p>
 <p style="margin:0;color:#6b6266">The link works for ${days === 1 ? "one day" : `${days} days`}. You sign in with this email address; no password needed.</p>`),
+  };
+}
+
+export function passkeyAddedMail(to: string, pk: { name: string | null; synced: boolean; at: Date; account: string }): Mail {
+  const when = pk.at.toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short" });
+  const what = `${pk.name ? `"${pk.name}"` : "A passkey"}${pk.synced ? ", synced through a password manager," : ""}`;
+  const ifNot = `If that wasn't you, remove it on your account page and end any sessions you don't recognize: ${pk.account}`;
+  return {
+    to,
+    subject: "A passkey was added to your stem account",
+    text: `${what} was added to your stem account on ${when}. It can sign you in from now on.\n\n${ifNot}\n\nIf it was you, there's nothing to do.`,
+    html: wrap("A passkey was added", `<p style="margin:0 0 12px">${pk.name ? `<strong>${esc(pk.name)}</strong>` : "A passkey"}${pk.synced ? ", synced through a password manager," : ""} was added to your stem account on ${esc(when)}. It can sign you in from now on.</p>
+<p style="margin:0 0 20px">If that wasn't you, remove it and end any sessions you don't recognize.</p>
+<p style="margin:0 0 20px"><a href="${esc(pk.account)}" style="display:inline-block;background:#FF2E52;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:999px">Open your account</a></p>
+<p style="margin:0;color:#6b6266">If it was you, there's nothing to do.</p>`, "stem is the sign-in for shiftbloom studio apps. We send this email whenever a passkey is added to your account."),
   };
 }
