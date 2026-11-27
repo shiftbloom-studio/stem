@@ -341,7 +341,7 @@ async function account() {
         label: "Make primary",
         run: async () => {
           const r = await client.$fetch("/stem/teams/primary", { method: "POST", body: { organization_id: o.id } });
-          if (r.error) fail(explain(r.error as ApiError)); else loadOrgs();
+          if (r.error) fail(explain(r.error as ApiError)); else await loadOrgs();
         },
       }));
     }
