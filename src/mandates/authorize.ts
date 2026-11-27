@@ -8,7 +8,8 @@ import type { JSONWebKeySet } from "jose";
 import type { Env } from "../env";
 import { createAuth } from "../auth";
 import { verifyMandate, allows, MandateError, type Right, type Budget } from "./verify";
-import type { Outcome } from "./object";
+import type { Outcome, MandateStatus } from "./object";
+import type { MandateRow } from "./plugin";
 
 export type AuthorizeInput = {
   /** The tokens from "Authorization: Mandate a~b~c", in order. */
@@ -65,11 +66,34 @@ export async function authorize(env: Env, i: AuthorizeInput): Promise<AuthorizeR
   return { allowed: true, mandate: v.mandate, sub: v.sub, purpose: v.purpose, holder: v.holder, depth: v.depth, rights: v.rights, remaining: live.remaining, exp: v.exp };
 }
 
+export type StatusResult = { status: MandateStatus["status"]; created_at: string | null; expires_at: string | null; revoked_at: string | null };
+
+const UNKNOWN: StatusResult = { status: "unknown", created_at: null, expires_at: null, revoked_at: null };
+
+/** Whether a mandate still stands, for an app that kept its id from an earlier authorize() and wants
+ * to show it: "signed on the 3rd, stopped on the 9th". No chain, no proof, nothing in the trail, and
+ * nothing about the person. Never a reason to let a request through: that is what authorize() is for.
+ * Starts from stem's own list, so asking about an id nobody issued doesn't create an object for it. */
+export async function status(env: Env, id: unknown): Promise<StatusResult> {
+  if (!env.MANDATE || typeof id !== "string" || !/^[0-9a-f-]{36}$/i.test(id)) return UNKNOWN;
+  const db = (await createAuth(env).$context).adapter;
+  const m = await db.findOne<MandateRow>({ model: "mandate", where: [{ field: "id", value: id }] });
+  if (!m) return UNKNOWN;
+  const iso = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
+  let state: StatusResult["status"] = m.status === "revoked" ? "revoked" : new Date(m.expiresAt).getTime() < Date.now() ? "expired" : "active";
+  // The object has the last word while the list says active: a stop reaches it first.
+  if (state === "active") state = (await env.MANDATE.get(env.MANDATE.idFromName(m.id)).status().catch(() => null))?.status ?? state;
+  return { status: state, created_at: iso(m.createdAt), expires_at: iso(m.expiresAt), revoked_at: iso(m.revokedAt) };
+}
+
 /** Named entrypoint for app Workers on the same account:
  * `services: [{ binding: "MANDATES", service: "stem", entrypoint: "MandateGateway" }]`. */
 export class MandateGatewayBase extends WorkerEntrypoint<Env> {
   authorize(input: AuthorizeInput) {
     return authorize(this.env, input);
+  }
+  status(mandate: string) {
+    return status(this.env, mandate);
   }
   jwks() {
     return ownJwks(this.env);

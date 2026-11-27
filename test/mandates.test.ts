@@ -340,6 +340,55 @@ describe("mandates: the whole flow", () => {
   });
 });
 
+describe("mandates: asking whether one still stands", () => {
+  // Its own stem: the flow above uses up the request limit of the agent's address.
+  const env = makeEnv();
+  const gw = new MandateGateway(ctx as never, env);
+  const b = new Browser(env);
+  const pk = new Passkey();
+  beforeAll(async () => {
+    pk.enrol(env, (await signIn(b, "ada@example.com")).id);
+  });
+
+  it("tells an app the state and the dates, and leaves no trace in the trail", async () => {
+    const root = await approvedMandate(env, b, pk);
+    const objects = (env.MANDATE as unknown as { objects: Map<string, MandateState> }).objects;
+    const active = await gw.status(root.id);
+    expect(active).toMatchObject({ status: "active", revoked_at: null });
+    expect(new Date(active.expires_at!).getTime() - new Date(active.created_at!).getTime()).toBeGreaterThan(86_000_000);
+    // Nothing about the person or the rights.
+    expect(Object.keys(active).sort()).toEqual(["created_at", "expires_at", "revoked_at", "status"]);
+
+    // An id nobody issued is unknown, and asking about it creates no object.
+    const made = objects.size;
+    const nobody = crypto.randomUUID();
+    for (const id of [nobody, "", "../etc", 42, null]) expect(await gw.status(id as never)).toEqual({ status: "unknown", created_at: null, expires_at: null, revoked_at: null });
+    expect(objects.size).toBe(made);
+    expect(objects.has(nobody)).toBe(false);
+
+    const db = env.DB as unknown as DatabaseSync;
+    const until = (db.prepare(`select expiresAt from mandate where id = ?`).get(root.id) as { expiresAt: string }).expiresAt;
+    db.prepare(`update mandate set expiresAt = ? where id = ?`).run(new Date(Date.now() - 1000).toISOString(), root.id);
+    expect(await gw.status(root.id)).toMatchObject({ status: "expired" });
+    db.prepare(`update mandate set expiresAt = ? where id = ?`).run(until, root.id);
+    expect(await gw.status(root.id)).toMatchObject({ status: "active" });
+
+    // A stop that reached the object but not yet the list still counts.
+    objects.get(root.id)!.revoke();
+    expect(await gw.status(root.id)).toMatchObject({ status: "revoked", revoked_at: null });
+    expect((await b.json("/api/auth/mandates/revoke", { id: root.id })).status).toBe(200);
+    const stopped = await gw.status(root.id);
+    expect(stopped.status).toBe("revoked");
+    expect(Date.parse(stopped.revoked_at!)).toBeGreaterThan(Date.now() - 60_000);
+
+    expect(((await (await b.fetch(`/api/auth/mandates/trail?id=${root.id}`)).json()) as unknown[]).length).toBe(0);
+  });
+
+  it("knows nothing when mandates are off", async () => {
+    expect(await new MandateGateway(ctx as never, makeEnv({ MANDATE: undefined })).status(crypto.randomUUID())).toMatchObject({ status: "unknown" });
+  });
+});
+
 describe("mandates: the verifier on its own", () => {
   // A stem of our own, to forge what a stolen signing key could produce.
   async function setup(uv = true) {
