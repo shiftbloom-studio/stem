@@ -90,7 +90,7 @@ function clientIdOf(query: unknown, body: unknown, headers: Headers | undefined)
   const b = body as { client_id?: unknown } | undefined;
   if (typeof q?.client_id === "string" && q.client_id) return q.client_id;
   if (typeof b?.client_id === "string" && b.client_id) return b.client_id;
-  const basic = /^Basic\s+(.+)$/i.exec(headers?.get("authorization") || "");
+  const basic = /^Basic\s+(\S.*)$/i.exec(headers?.get("authorization") || "");
   if (!basic) return null;
   try {
     const raw = atob(basic[1].trim());

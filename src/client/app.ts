@@ -199,7 +199,7 @@ function signIn() {
     ev.preventDefault();
     const form = ev.currentTarget as HTMLFormElement;
     const btn = form.querySelector<HTMLButtonElement>("button[type=submit]");
-    busy(btn, async () => {
+    void busy(btn, async () => {
       fail(null);
       email = ($<HTMLInputElement>("email")?.value || "").trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { fail("That doesn't look like an email address."); return; }
@@ -217,7 +217,7 @@ function signIn() {
   codeForm?.addEventListener("submit", (ev) => {
     ev.preventDefault();
     const btn = codeForm.querySelector<HTMLButtonElement>("button[type=submit]");
-    busy(btn, async () => {
+    void busy(btn, async () => {
       fail(null);
       const otp = ($<HTMLInputElement>("otp")?.value || "").replace(/\D/g, "");
       if (otp.length !== 6) { fail("The code has six digits."); return; }
@@ -237,7 +237,7 @@ function signIn() {
   nameForm?.addEventListener("submit", (ev) => {
     ev.preventDefault();
     const btn = nameForm.querySelector<HTMLButtonElement>("button[type=submit]");
-    busy(btn, async () => {
+    void busy(btn, async () => {
       fail(null);
       const name = ($<HTMLInputElement>("name")?.value || "").trim();
       if (name.length < 1) { fail("Tell us a name, even a short one."); return; }
@@ -300,7 +300,7 @@ async function account() {
   $<HTMLFormElement>("profile-form")?.addEventListener("submit", (ev) => {
     ev.preventDefault();
     const btn = (ev.currentTarget as HTMLFormElement).querySelector<HTMLButtonElement>("button");
-    busy(btn, async () => {
+    void busy(btn, async () => {
       fail(null);
       const name = (nameInput?.value || "").trim().slice(0, 80);
       if (!name) { fail("Tell us a name, even a short one."); return; }
@@ -324,7 +324,7 @@ async function account() {
           const r = await client.passkey.deletePasskey({ id: pk.id });
           if (r.error) { fail(explain(r.error as ApiError)); return; }
           if (pk.credentialID) await forgetCredential(pk.credentialID);
-          loadPasskeys();
+          void loadPasskeys();
         },
       }));
   }
@@ -334,7 +334,7 @@ async function account() {
     fail(null);
     const res = await client.passkey.addPasskey({ name: deviceName() });
     if (res?.error && !/cancel|abort|NotAllowed/i.test(res.error.message || "")) fail(explain(res.error as ApiError));
-    loadPasskeys();
+    void loadPasskeys();
   }));
 
   async function loadSessions() {
@@ -347,7 +347,7 @@ async function account() {
       const current = x.id === session.id;
       ul.append(li(`${browserOf(x.userAgent)}${current ? " (this one)" : ""}`, `Since ${fmt(x.createdAt)}${x.ipAddress ? ` · ${x.ipAddress}` : ""}`, current ? undefined : {
         label: "End",
-        run: async () => { const r = await client.revokeSession({ token: x.token }); if (r.error) fail(explain(r.error as ApiError)); else loadSessions(); },
+        run: async () => { const r = await client.revokeSession({ token: x.token }); if (r.error) fail(explain(r.error as ApiError)); else void loadSessions(); },
       }));
     }
   }
@@ -383,14 +383,14 @@ async function account() {
         run: async () => {
           if (!confirm(`Remove ${a.name}'s access? It can't use your account anymore until you sign in to it again.`)) return;
           const r = await client.$fetch("/stem/apps/remove", { method: "POST", body: { client_id: a.client_id } });
-          if (r.error) fail(explain(r.error as ApiError)); else loadApps();
+          if (r.error) fail(explain(r.error as ApiError)); else void loadApps();
         },
       }));
   }
 
   $("revoke-others")?.addEventListener("click", async () => {
     const r = await client.revokeOtherSessions();
-    if (r.error) fail(explain(r.error as ApiError)); else loadSessions();
+    if (r.error) fail(explain(r.error as ApiError)); else void loadSessions();
   });
   $("sign-out")?.addEventListener("click", async () => { await client.signOut(); location.assign("/"); });
   $("delete-account")?.addEventListener("click", async () => {

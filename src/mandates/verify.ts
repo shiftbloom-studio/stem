@@ -78,7 +78,7 @@ const te = new TextEncoder();
 export const b64u = (b: Uint8Array) => {
   let s = "";
   for (const x of b) s += String.fromCharCode(x);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/={1,2}$/, "");
 };
 export const unb64u = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 export const sha256 = async (d: Uint8Array | string) => new Uint8Array(await crypto.subtle.digest("SHA-256", typeof d === "string" ? te.encode(d) : d));

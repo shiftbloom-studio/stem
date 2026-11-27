@@ -21,7 +21,7 @@ async function challengeOf(core: unknown) {
   const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canon(core))));
   let s = "";
   for (const x of d) s += String.fromCharCode(x);
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/={1,2}$/, "");
 }
 
 export function approveMandate(h: Helpers) {
@@ -68,7 +68,7 @@ export async function loadAgents(h: Helpers) {
       run: async () => {
         if (!confirm(`Stop "${a.purpose}"? It and every helper it started lose access on their next request.`)) return;
         const r = await h.$fetch("/mandates/revoke", { method: "POST", body: { id: a.id } });
-        if (r.error) h.fail(r.error.message || "That didn't work."); else loadAgents(h);
+        if (r.error) h.fail(r.error.message || "That didn't work."); else void loadAgents(h);
       },
     } : undefined);
     const more = document.createElement("button");
