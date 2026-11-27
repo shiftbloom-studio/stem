@@ -14,8 +14,11 @@ async function waitForClearance(maxMs = 8000) {
   if (clearedOnce || !document.querySelector(".cf-turnstile")) return;
   const solved = () => Array.from(document.querySelectorAll<HTMLInputElement>("[name=cf-turnstile-response]")).some((i) => !!i.value);
   for (const end = Date.now() + maxMs; Date.now() < end; await new Promise((r) => setTimeout(r, 150))) {
-    if (solved()) { clearedOnce = true; return; }
+    if (solved()) break;
   }
+  // Wait only once per page, even if Turnstile never solves (blocked script, no network), so later
+  // calls don't each stall for the full timeout.
+  clearedOnce = true;
 }
 
 const client = createAuthClient({
