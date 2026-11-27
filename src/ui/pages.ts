@@ -92,7 +92,7 @@ export function signInPage(ui: Ui, clientName: string | null, stepUp: StepUp | n
 
 export function accountPage(ui: Ui) {
   return page(
-    { title: "Your account · stem.", page: "account", legal: ui.legal },
+    { title: "Your account · stem.", page: "account", legal: ui.legal, clearance: ui.turnstileSiteKey },
     `<section style="padding-top:clamp(32px,6vw,64px)">
   <span class="label">your account</span>
   <h1 style="margin-top:14px" id="hello">Hello<em>.</em></h1>
@@ -165,7 +165,7 @@ export function consentPage(ui: Ui, client: { name: string; uri: string | null }
   };
   const items = scopes.filter((s) => SCOPE_TEXT[s]).map((s) => `<li>${esc(SCOPE_TEXT[s])}</li>`).join("");
   return page(
-    { title: `Allow ${client.name} · stem.`, page: "consent", legal: ui.legal },
+    { title: `Allow ${client.name} · stem.`, page: "consent", legal: ui.legal, clearance: ui.turnstileSiteKey },
     `<section class="split">
   <div>
     <span class="label">permission</span>
@@ -192,7 +192,7 @@ export function invitePage(ui: Ui, inv: { id: string; orgName: string; email: st
 <p class="lead">It may have expired, been withdrawn or already been used. Ask the person who invited you to send a new one.</p></section>`,
     );
   return page(
-    { title: `Join ${inv.orgName} · stem.`, page: "invite", legal: ui.legal, data: { invite: inv.id, email: inv.email } },
+    { title: `Join ${inv.orgName} · stem.`, page: "invite", legal: ui.legal, clearance: ui.turnstileSiteKey, data: { invite: inv.id, email: inv.email } },
     `<section class="split">
   <div>
     <span class="label">invitation</span>

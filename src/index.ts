@@ -24,9 +24,12 @@ import { passkeyNoticeEnabled } from "./passkey-notice";
 import { phCapture, phException, phKey } from "./posthog";
 
 const TURNSTILE = "https://challenges.cloudflare.com";
-const CSP = [
+// stem has no inline scripts. The per-response nonce is for Cloudflare's JavaScript Detections: the edge
+// copies the nonce from this header onto the small inline script it injects. Without it the browser blocks
+// that script, the bot score drops, and Super Bot Fight Mode challenges sign-in calls.
+const csp = (nonce: string) => [
   "default-src 'none'",
-  `script-src 'self' ${TURNSTILE}`,
+  `script-src 'self' 'nonce-${nonce}' ${TURNSTILE}`,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
@@ -36,6 +39,8 @@ const CSP = [
   "base-uri 'none'",
   "frame-ancestors 'none'",
 ].join("; ");
+
+const cspNonce = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 
 /** Paths that count toward the per-IP sign-in limit, on top of Better Auth's own per-endpoint limits. */
 const SIGN_IN_PATHS = /^\/api\/auth\/(email-otp\/|sign-in\/|passkey\/(generate-authenticate|verify-authentication))/;
@@ -65,7 +70,7 @@ app.use("*", async (c, next) => {
   h.set("referrer-policy", "strict-origin-when-cross-origin");
   h.set("cross-origin-opener-policy", "same-origin");
   h.set("permissions-policy", "publickey-credentials-get=(self), publickey-credentials-create=(self), camera=(), microphone=(), geolocation=()");
-  if ((h.get("content-type") || "").startsWith("text/html")) h.set("content-security-policy", CSP);
+  if ((h.get("content-type") || "").startsWith("text/html")) h.set("content-security-policy", csp(cspNonce()));
   const p = new URL(c.req.url).pathname;
   if (!(p === "/" || p === "/robots.txt" || p === "/favicon.svg" || p.startsWith("/assets/") || LEGAL_PATHS[p])) h.set("x-robots-tag", "noindex, nofollow");
 });

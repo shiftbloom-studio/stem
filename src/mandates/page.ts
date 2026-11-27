@@ -37,7 +37,7 @@ export function approvePage(ui: Ui, req: { id: string; userCode: string; terms: 
     budget.length ? `Shared by everything it starts: ${budget.join(" and ")}.` : "",
   ].filter(Boolean);
   return page(
-    { title: "Approve an agent · stem.", page: "mandate", legal: ui.legal, data: { request: req.id } },
+    { title: "Approve an agent · stem.", page: "mandate", legal: ui.legal, clearance: ui.turnstileSiteKey, data: { request: req.id } },
     `<section class="split">
   <div>
     <span class="label">agent request</span>

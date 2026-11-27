@@ -6,10 +6,31 @@ import { passkeyClient } from "@better-auth/passkey/client";
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { approveMandate, loadAgents } from "./mandates";
 
+// Pages with a Turnstile widget get Cloudflare's clearance cookie once it has solved (pre-clearance).
+// Without that cookie the zone's bot protection may answer a POST with a challenge page, which fetch
+// can't show. So a POST waits, once per page, for the first token, at most a few seconds.
+let clearedOnce = false;
+async function waitForClearance(maxMs = 8000) {
+  if (clearedOnce || !document.querySelector(".cf-turnstile")) return;
+  const solved = () => Array.from(document.querySelectorAll<HTMLInputElement>("[name=cf-turnstile-response]")).some((i) => !!i.value);
+  for (const end = Date.now() + maxMs; Date.now() < end; await new Promise((r) => setTimeout(r, 150))) {
+    if (solved()) break;
+  }
+  // Wait only once per page, even if Turnstile never solves (blocked script, no network), so later
+  // calls don't each stall for the full timeout.
+  clearedOnce = true;
+}
+
 const client = createAuthClient({
   basePath: "/api/auth",
   // We follow redirects ourselves, so a new account can pick a name before going back to the app.
   disableDefaultFetchPlugins: true,
+  fetchOptions: {
+    async onRequest(ctx) {
+      if ((ctx.method || "GET").toUpperCase() !== "GET") await waitForClearance();
+      return ctx;
+    },
+  },
   plugins: [emailOTPClient(), passkeyClient(), organizationClient(), oauthProviderClient()],
 });
 
@@ -29,6 +50,9 @@ function explain(err: ApiError, fallback = "Something went wrong. Try again."): 
   if (!err) return fallback;
   if (err.status === 429) return "Too many attempts. Wait a minute, then try again.";
   const code = err.code || "";
+  // stem's own 403s carry a code. One without a code is Cloudflare's bot check answering a fetch with a
+  // challenge page the browser can't show. A page load can pass that check, so reloading fixes it.
+  if (err.status === 403 && !code) return "Our bot check stopped this request. Reload the page, then try again.";
   if (/INVALID_OTP|OTP_EXPIRED|TOO_MANY_ATTEMPTS/.test(code)) return code === "OTP_EXPIRED" ? "That code has expired. Ask for a new one." : code === "TOO_MANY_ATTEMPTS" ? "Too many wrong codes. Ask for a new one." : "That code isn't right. Check it and try again.";
   if (/CAPTCHA/i.test(code) || /captcha/i.test(err.message || "")) return "We couldn't confirm you're a person. Try the check again.";
   if (/SESSION|FRESH/i.test(code)) return "For your safety, sign in again first, then try once more.";

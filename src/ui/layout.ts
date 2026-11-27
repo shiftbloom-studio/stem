@@ -69,6 +69,12 @@ export type PageOpts = {
   description?: string;
   canonical?: string;
   turnstile?: boolean;
+  /**
+   * Turnstile site key for a background check that gives the browser Cloudflare's clearance cookie
+   * (pre-clearance), so the zone's bot protection doesn't answer this page's API calls with a challenge
+   * the browser can't show. Stays invisible unless Cloudflare wants a click.
+   */
+  clearance?: string | null;
   data?: Record<string, string>;
   legal?: boolean;
 };
@@ -91,6 +97,6 @@ export function page(o: PageOpts, body: string, right = "") {
 <title>${esc(o.title)}</title>${o.index ? "" : `<meta name="robots" content="noindex, nofollow">`}${o.description ? `<meta name="description" content="${esc(o.description)}">` : ""}${o.canonical ? `<link rel="canonical" href="${esc(o.canonical)}">` : ""}
 <meta name="theme-color" content="#F6F1EE"><meta name="referrer" content="strict-origin-when-cross-origin">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/assets/fonts.css"><style>${css}</style>
-${o.page ? `<script src="/assets/app.js" defer></script>` : ""}${o.turnstile ? `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>` : ""}
-</head><body${o.page ? ` data-page="${esc(o.page)}"` : ""}${data}><div class="wrap">${topbar(right)}<main>${body}</main>${footer(lang, !!o.legal)}</div></body></html>`;
+${o.page ? `<script src="/assets/app.js" defer></script>` : ""}${o.turnstile || o.clearance ? `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>` : ""}
+</head><body${o.page ? ` data-page="${esc(o.page)}"` : ""}${data}><div class="wrap">${topbar(right)}<main>${body}${o.clearance ? `<div class="cf-turnstile" data-sitekey="${esc(o.clearance)}" data-action="clearance" data-appearance="interaction-only" data-theme="light" data-size="flexible" style="margin-top:24px"></div>` : ""}</main>${footer(lang, !!o.legal)}</div></body></html>`;
 }

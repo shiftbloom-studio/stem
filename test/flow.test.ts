@@ -78,6 +78,11 @@ describe("stem", () => {
     expect(home.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(home.headers.get("strict-transport-security")).toContain("max-age=");
     expect(await home.text()).not.toMatch(/<script>(?!<\/script>)/);
+    // A fresh nonce per page, for the script Cloudflare's JavaScript Detections injects at the edge.
+    const nonce = (r: Response) => r.headers.get("content-security-policy")?.match(/'nonce-([A-Za-z0-9+/=]{20,})'/)?.[1];
+    const again = await browser.fetch("/");
+    expect(nonce(home)).toBeTruthy();
+    expect(nonce(again)).not.toBe(nonce(home));
   });
 
   it("hides legal pages until operator details are configured", async () => {
