@@ -12,8 +12,9 @@ import { createAuth, directoryAudience, resourceList, SCOPES, DIRECTORY_SCOPE, O
 import { isRole, roleNames } from "./roles";
 import { inviteMail, sendMail } from "./email";
 import { timingSafeEqual } from "./util";
-import { chunks } from "./claims";
+import { chunks, isStemTeam } from "./claims";
 import { gatewayOf } from "./gateway";
+import { setPrimaryTeam } from "./account";
 import { isSealedApp, sealedEnabled, sealedScopes } from "./sealed";
 
 type Vars = { auth: Auth; app: string; clientId: string };
@@ -45,11 +46,11 @@ async function body<T>(c: C): Promise<T | null> {
 }
 
 type Org = { id: string; name: string; slug: string; logo?: string | null; metadata?: unknown; app?: string | null; createdAt: Date };
-type Member = { id: string; organizationId: string; userId: string; role: string; createdAt: Date };
+type Member = { id: string; organizationId: string; userId: string; role: string; isPrimary?: boolean | number | null; createdAt: Date };
 type Invitation = { id: string; organizationId: string; email: string; role: string | null; status: string; expiresAt: Date; createdAt: Date; inviterId: string; redirectTo?: string | null };
 type User = { id: string; email: string; name: string; emailVerified: boolean; createdAt: Date };
 
-const orgOut = (o: Org) => ({ id: o.id, name: o.name, slug: o.slug, logo: o.logo || null, metadata: asJson(o.metadata), app: o.app || null, created_at: iso(o.createdAt) });
+const orgOut = (o: Org) => ({ id: o.id, name: o.name, slug: o.slug, logo: o.logo || null, metadata: asJson(o.metadata), app: o.app || null, stem_wide: isStemTeam(o), created_at: iso(o.createdAt) });
 const invOut = (i: Invitation) => ({ id: i.id, organization_id: i.organizationId, email: i.email, role: i.role, status: i.status, expires_at: iso(i.expiresAt), created_at: iso(i.createdAt), inviter_id: i.inviterId, redirect_to: i.redirectTo || null });
 const userOut = (u: User) => ({ id: u.id, email: u.email, name: u.name || null, email_verified: !!u.emailVerified });
 
@@ -66,6 +67,28 @@ async function findOrCreateUser(c: C, email: string, name = ""): Promise<User> {
 async function appOrg(c: C, id: string): Promise<Org | null> {
   const org = await (await adapter(c)).findOne<Org>({ model: "organization", where: [{ field: "id", value: id }] });
   return org && org.app === c.get("app") ? org : null;
+}
+
+/** Stem-wide teams: organizations without an app. */
+async function stemTeams(c: C): Promise<Org[]> {
+  return (await adapter(c)).findMany<Org>({ model: "organization", where: [{ field: "app", value: null }], limit: 200, sortBy: { field: "createdAt", direction: "asc" } });
+}
+
+/** Organizations an app may read (not change): its own, and stem-wide teams unless the app is sealed. */
+async function readableOrg(c: C, id: string): Promise<Org | null> {
+  const org = await (await adapter(c)).findOne<Org>({ model: "organization", where: [{ field: "id", value: id }] });
+  if (!org) return null;
+  if (org.app === c.get("app")) return org;
+  return isStemTeam(org) && !isSealedApp(c.env, c.get("app")) ? org : null;
+}
+
+/** Makes a membership the person's primary one; the unique index allows one per person. */
+const makePrimary = async (c: C, m: Member) => setPrimaryTeam((await adapter(c)) as never, m.userId, m.organizationId);
+
+/** The person a member request names: by user id, or by email (an account is created for unknown emails). */
+async function memberTarget(c: C, b: { user_id?: string; email?: string }): Promise<User | null> {
+  if (b.user_id) return (await adapter(c)).findOne<User>({ model: "user", where: [{ field: "id", value: b.user_id }] });
+  return b.email && EMAIL.test(b.email) ? findOrCreateUser(c, b.email) : null;
 }
 
 /** Redirects after accepting an invitation must go back to the app: same origin as one of its clients' redirect URIs. */
@@ -138,21 +161,45 @@ export function apiRoutes() {
     return c.json(created, 201);
   });
 
-  /** Creates an organization for an app, optionally with a first owner (by email; the account is created if needed). */
+  /** Creates an organization for an app, optionally with a first owner (by email; the account is created if needed).
+   * With `stem_wide: true` and no app it's a stem-wide team: every app but sealed ones sees it in the `orgs` claim,
+   * and only the operator manages it. */
   op.post("/orgs", async (c) => {
-    const b = await body<{ app?: string; name?: string; slug?: string; owner_email?: string; metadata?: Record<string, unknown> }>(c);
-    if (!b || !b.app || !APP_ID.test(b.app)) return err(c, 400, "invalid_app");
+    const b = await body<{ app?: string; stem_wide?: boolean; name?: string; slug?: string; owner_email?: string; owner_primary?: boolean; metadata?: Record<string, unknown> }>(c);
+    if (!b) return err(c, 400, "invalid_request");
+    if (b.stem_wide === true ? b.app !== undefined : !b.app || !APP_ID.test(b.app)) return err(c, 400, "invalid_app", "either an app, or stem_wide: true without one");
     if (!b.name || b.name.length > 120 || !b.slug || !SLUG.test(b.slug)) return err(c, 400, "invalid_request", "name (max 120) and slug (lowercase, digits, dashes) are required");
     if (b.owner_email && !EMAIL.test(b.owner_email)) return err(c, 400, "invalid_email");
     const db = await adapter(c);
     if (await db.findOne({ model: "organization", where: [{ field: "slug", value: b.slug }] })) return err(c, 409, "slug_taken");
-    const org = await db.create<Record<string, unknown>, Org>({ model: "organization", data: { name: b.name, slug: b.slug, app: b.app, metadata: JSON.stringify(b.metadata || {}), createdAt: new Date() } });
+    const org = await db.create<Record<string, unknown>, Org>({ model: "organization", data: { name: b.name, slug: b.slug, app: b.app || null, metadata: JSON.stringify(b.metadata || {}), createdAt: new Date() } });
     let owner: User | null = null;
     if (b.owner_email) {
       owner = await findOrCreateUser(c, b.owner_email);
-      await db.create({ model: "member", data: { organizationId: org.id, userId: owner.id, role: "owner", createdAt: new Date() } });
+      const m = await db.create<Record<string, unknown>, Member>({ model: "member", data: { organizationId: org.id, userId: owner.id, role: "owner", createdAt: new Date() } });
+      if (b.owner_primary === true) await makePrimary(c, m);
     }
     return c.json({ ...orgOut(org), owner: owner ? userOut(owner) : null }, 201);
+  });
+
+  /** Adds someone to any organization, or changes their role, and optionally makes it their primary team.
+   * Stem-wide teams have no app to manage them, so this is how people get into those. */
+  op.put("/orgs/:id/members", async (c) => {
+    const db = await adapter(c);
+    const org = await db.findOne<Org>({ model: "organization", where: [{ field: "id", value: c.req.param("id") }] });
+    if (!org) return err(c, 404, "not_found");
+    const b = await body<{ user_id?: string; email?: string; role?: string; primary?: boolean }>(c);
+    if (!b || !b.role || !isRole(b.role, c.env.ORG_ROLES)) return err(c, 400, "invalid_role");
+    const user = await memberTarget(c, b);
+    if (!user) return err(c, 404, "user_not_found");
+    const where = [{ field: "organizationId", value: org.id }, { field: "userId", value: user.id }];
+    let m = await db.findOne<Member>({ model: "member", where });
+    const created = !m;
+    if (!m) m = await db.create<Record<string, unknown>, Member>({ model: "member", data: { organizationId: org.id, userId: user.id, role: b.role, createdAt: new Date() } });
+    else if (m.role !== b.role) m = (await db.update<Member>({ model: "member", where, update: { role: b.role } })) || m;
+    if (b.primary === true) await makePrimary(c, m);
+    const now = await db.findOne<Member>({ model: "member", where });
+    return c.json({ organization_id: org.id, user_id: user.id, role: now?.role || m.role, primary: !!now?.isPrimary, user: userOut(user) }, created ? 201 : 200);
   });
 
   op.get("/orgs", async (c) => {
@@ -212,13 +259,15 @@ export function apiRoutes() {
 
   dir.get("/roles", (c) => c.json({ data: roleNames(c.env.ORG_ROLES) }));
 
+  /** The app's organizations, then the stem-wide teams it sees (read-only for the app). */
   dir.get("/orgs", async (c) => {
     const orgs = await (await adapter(c)).findMany<Org>({ model: "organization", where: [{ field: "app", value: c.get("app") }], limit: 200, sortBy: { field: "createdAt", direction: "asc" } });
-    return c.json({ data: orgs.map(orgOut) });
+    const shared = isSealedApp(c.env, c.get("app")) ? [] : await stemTeams(c);
+    return c.json({ data: [...orgs, ...shared].map(orgOut) });
   });
 
   dir.get("/orgs/:id", async (c) => {
-    const org = await appOrg(c, c.req.param("id"));
+    const org = await readableOrg(c, c.req.param("id"));
     return org ? c.json(orgOut(org)) : err(c, 404, "not_found");
   });
 
@@ -263,9 +312,7 @@ export function apiRoutes() {
     const b = await body<{ user_id?: string; email?: string; role?: string }>(c);
     if (!b || !b.role || !isRole(b.role, c.env.ORG_ROLES)) return err(c, 400, "invalid_role");
     const db = await adapter(c);
-    let user: User | null = null;
-    if (b.user_id) user = await db.findOne<User>({ model: "user", where: [{ field: "id", value: b.user_id }] });
-    else if (b.email && EMAIL.test(b.email)) user = await findOrCreateUser(c, b.email);
+    const user = await memberTarget(c, b);
     if (!user) return err(c, 404, "user_not_found");
     if (await db.findOne({ model: "member", where: [{ field: "organizationId", value: org.id }, { field: "userId", value: user.id }] })) return err(c, 409, "already_member");
     const m = await db.create<Record<string, unknown>, Member>({ model: "member", data: { organizationId: org.id, userId: user.id, role: b.role, createdAt: new Date() } });

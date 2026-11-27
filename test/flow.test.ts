@@ -10,6 +10,7 @@ import { UNUSED_PATHS, createAuth } from "../src/auth";
 import { cleanup } from "../src/cleanup";
 import type { Env } from "../src/env";
 import { appAddress } from "../src/gateway";
+import { Browser, ctx } from "./support";
 
 const ORIGIN = "https://stem.test";
 const API = "https://app.test/api";
@@ -17,8 +18,6 @@ const CALLBACK = "https://app.test/auth/callback";
 const OPERATOR = "op_" + "x".repeat(40);
 
 const sent: { to: string; subject: string; text: string }[] = [];
-const pending: Promise<unknown>[] = [];
-const ctx = { waitUntil: (p: Promise<unknown>) => void pending.push(p), passThroughOnException() {}, props: {} };
 
 function makeEnv(extra: Partial<Env> = {}): Env {
   const db = new DatabaseSync(":memory:");
@@ -38,28 +37,6 @@ function makeEnv(extra: Partial<Env> = {}): Env {
   };
 }
 
-class Browser {
-  cookies = new Map<string, string>();
-  constructor(private env: Env, public ip = "203.0.113.7") {}
-  async fetch(path: string, init: RequestInit = {}) {
-    const headers = new Headers(init.headers);
-    headers.set("origin", ORIGIN);
-    headers.set("cf-connecting-ip", this.ip);
-    if (this.cookies.size) headers.set("cookie", [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; "));
-    const res = await app.fetch(new Request(new URL(path, ORIGIN), { ...init, headers, redirect: "manual" }), this.env, ctx as never);
-    for (const c of res.headers.getSetCookie()) {
-      const [pair] = c.split(";");
-      const i = pair.indexOf("=");
-      const v = pair.slice(i + 1);
-      if (v) this.cookies.set(pair.slice(0, i), v); else this.cookies.delete(pair.slice(0, i));
-    }
-    await Promise.all(pending.splice(0));
-    return res;
-  }
-  json(path: string, body: unknown, headers: Record<string, string> = {}) {
-    return this.fetch(path, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", ...headers } });
-  }
-}
 
 const op = (b: Browser, path: string, body?: unknown) =>
   b.fetch(`/api/v1/operator${path}`, { method: body ? "POST" : "GET", body: body ? JSON.stringify(body) : undefined, headers: { authorization: `Bearer ${OPERATOR}`, "content-type": "application/json" } });

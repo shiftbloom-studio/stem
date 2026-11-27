@@ -331,10 +331,20 @@ async function account() {
   async function loadOrgs() {
     const ul = $("orgs"); if (!ul) return;
     ul.replaceChildren();
-    const res = await client.organization.list();
-    const list = (res.data || []) as { name: string; slug: string }[];
+    const res = await client.$fetch<{ id: string; name: string; role: string; primary: boolean; stem_wide: boolean }[]>("/stem/teams", { method: "GET" });
+    if (res.error) { fail(explain(res.error as ApiError, "We couldn't load your teams.")); return; }
+    const list = res.data || [];
     if (!list.length) { ul.append(li("No teams", "Apps add you to teams when someone invites you.")); return; }
-    for (const o of list) ul.append(li(o.name, o.slug));
+    for (const o of list) {
+      const meta = [o.primary ? "Primary" : "", o.role, o.stem_wide ? "all apps" : ""].filter(Boolean).join(" · ");
+      ul.append(li(o.name, meta, o.primary ? undefined : {
+        label: "Make primary",
+        run: async () => {
+          const r = await client.$fetch("/stem/teams/primary", { method: "POST", body: { organization_id: o.id } });
+          if (r.error) fail(explain(r.error as ApiError)); else await loadOrgs();
+        },
+      }));
+    }
   }
 
   async function loadApps() {
