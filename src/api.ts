@@ -14,6 +14,7 @@ import { inviteMail, sendMail } from "./email";
 import { timingSafeEqual } from "./util";
 import { chunks, isStemTeam } from "./claims";
 import { gatewayOf } from "./gateway";
+import { setPrimaryTeam } from "./account";
 import { isSealedApp, sealedEnabled, sealedScopes } from "./sealed";
 
 type Vars = { auth: Auth; app: string; clientId: string };
@@ -82,10 +83,12 @@ async function readableOrg(c: C, id: string): Promise<Org | null> {
 }
 
 /** Makes a membership the person's primary one; the unique index allows one per person. */
-async function makePrimary(c: C, m: Member) {
-  const db = await adapter(c);
-  await db.updateMany({ model: "member", where: [{ field: "userId", value: m.userId }, { field: "isPrimary", value: true }], update: { isPrimary: false } });
-  await db.update({ model: "member", where: [{ field: "id", value: m.id }], update: { isPrimary: true } });
+const makePrimary = async (c: C, m: Member) => setPrimaryTeam((await adapter(c)) as never, m.userId, m.organizationId);
+
+/** The person a member request names: by user id, or by email (an account is created for unknown emails). */
+async function memberTarget(c: C, b: { user_id?: string; email?: string }): Promise<User | null> {
+  if (b.user_id) return (await adapter(c)).findOne<User>({ model: "user", where: [{ field: "id", value: b.user_id }] });
+  return b.email && EMAIL.test(b.email) ? findOrCreateUser(c, b.email) : null;
 }
 
 /** Redirects after accepting an invitation must go back to the app: same origin as one of its clients' redirect URIs. */
@@ -187,9 +190,7 @@ export function apiRoutes() {
     if (!org) return err(c, 404, "not_found");
     const b = await body<{ user_id?: string; email?: string; role?: string; primary?: boolean }>(c);
     if (!b || !b.role || !isRole(b.role, c.env.ORG_ROLES)) return err(c, 400, "invalid_role");
-    let user: User | null = null;
-    if (b.user_id) user = await db.findOne<User>({ model: "user", where: [{ field: "id", value: b.user_id }] });
-    else if (b.email && EMAIL.test(b.email)) user = await findOrCreateUser(c, b.email);
+    const user = await memberTarget(c, b);
     if (!user) return err(c, 404, "user_not_found");
     const where = [{ field: "organizationId", value: org.id }, { field: "userId", value: user.id }];
     let m = await db.findOne<Member>({ model: "member", where });
@@ -311,9 +312,7 @@ export function apiRoutes() {
     const b = await body<{ user_id?: string; email?: string; role?: string }>(c);
     if (!b || !b.role || !isRole(b.role, c.env.ORG_ROLES)) return err(c, 400, "invalid_role");
     const db = await adapter(c);
-    let user: User | null = null;
-    if (b.user_id) user = await db.findOne<User>({ model: "user", where: [{ field: "id", value: b.user_id }] });
-    else if (b.email && EMAIL.test(b.email)) user = await findOrCreateUser(c, b.email);
+    const user = await memberTarget(c, b);
     if (!user) return err(c, 404, "user_not_found");
     if (await db.findOne({ model: "member", where: [{ field: "organizationId", value: org.id }, { field: "userId", value: user.id }] })) return err(c, 409, "already_member");
     const m = await db.create<Record<string, unknown>, Member>({ model: "member", data: { organizationId: org.id, userId: user.id, role: b.role, createdAt: new Date() } });
