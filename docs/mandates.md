@@ -81,6 +81,15 @@ if (!r.allowed) return new Response(r.message, { status: 403 });
 
 **Elsewhere:** `POST {issuer}/api/mandates/authorize` with the same fields as JSON. The answer is the same.
 
+**Showing a mandate later:** an app that kept `r.mandate` can ask whether it still stands, for example to print "signed on the 3rd, stopped on the 9th" next to something the mandate once let through.
+
+```ts
+const s = await env.MANDATES.status(mandateId);
+// s.status: "active" | "revoked" | "expired" | "unknown", s.created_at, s.expires_at, s.revoked_at
+```
+
+`status` takes no chain and no proof, writes nothing to the trail and says nothing about the person. It is for display only: a request is let through by `authorize`, never by `status`. It is available over the service binding, not over HTTP.
+
 **Offline:** `src/mandates/verify.ts` depends on `jose` and WebCrypto only, and an app can copy it to check chains without stem. It can't know about a stop, the budget or a replayed proof, so use it as a first filter, not instead of the live check.
 
 Refusal reasons: `invalid_chain`, `invalid_human_proof`, `wider_than_parent`, `too_deep`, `invalid_pop`, `outside_mandate`, `revoked`, `expired`, `unknown`, `over_budget`, `replayed`.
