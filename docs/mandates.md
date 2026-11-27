@@ -88,7 +88,7 @@ const s = await env.MANDATES.status(mandateId);
 // s.status: "active" | "revoked" | "expired" | "unknown", s.created_at, s.expires_at, s.revoked_at
 ```
 
-`status` takes no chain and no proof, writes nothing to the trail and says nothing about the person. It is for display only: a request is let through by `authorize`, never by `status`. It is available over the service binding, not over HTTP.
+`status` takes no chain and no proof, writes nothing to the trail and says nothing about the person. It is for display only: a request is let through by `authorize`, never by `status`. It is available over the service binding, not over HTTP. Any app with the binding can ask about any id, not only one it got from `authorize`: the ids are random, and the answer holds the state and three dates, nothing else.
 
 **Offline:** `src/mandates/verify.ts` depends on `jose` and WebCrypto only, and an app can copy it to check chains without stem. It can't know about a stop, the budget or a replayed proof, so use it as a first filter, not instead of the live check.
 
