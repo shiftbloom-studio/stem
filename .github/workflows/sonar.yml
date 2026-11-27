@@ -34,7 +34,7 @@ jobs:
         with:
           node-version: 26
           cache: npm
-      - run: npm ci --prefer-offline --no-audit --no-fund
+      - run: npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
         if: env.SONAR_TOKEN != ''
       - run: npm run test:coverage
         if: env.SONAR_TOKEN != ''
