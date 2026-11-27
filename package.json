@@ -23,6 +23,7 @@
     "deploy": "npm run build:client && node scripts/render-config.mjs && wrangler deploy -c wrangler.deploy.jsonc",
     "typecheck": "tsc -p . && tsc -p tsconfig.client.json",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "check": "npm run typecheck && vitest run && npm run build",
     "db:schema": "esbuild scripts/schema.ts --bundle --platform=node --format=esm --packages=external --log-level=warning --outfile=.wrangler/schema.mjs && node .wrangler/schema.mjs",
     "db:migrate": "node scripts/render-config.mjs && wrangler d1 migrations apply stem-db --remote -c wrangler.deploy.jsonc",
@@ -40,6 +41,7 @@
   "devDependencies": {
     "@cloudflare/privacypass-ts": "0.9.0",
     "@cloudflare/workers-types": "^5.20261125.1",
+    "@vitest/coverage-v8": "^5.1.2",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vitest": "^5.1.2",

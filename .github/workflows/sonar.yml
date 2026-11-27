@@ -1,0 +1,42 @@
+name: SonarQube
+
+# Tests with coverage plus SonarQube Cloud analysis. Runs on PRs and on main
+# (main gives SonarQube the baseline for new-code checks). Skipped when the
+# SONAR_TOKEN secret is not available, e.g. on PRs from forks.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sonar:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        if: env.SONAR_TOKEN != ''
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        if: env.SONAR_TOKEN != ''
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci --prefer-offline --no-audit --no-fund
+        if: env.SONAR_TOKEN != ''
+      - run: npm run test:coverage
+        if: env.SONAR_TOKEN != ''
+      - uses: SonarSource/sonarqube-scan-action@70bad232163b09d998ea0707ee80c0ec80798c16 # v8.5.1
+        if: env.SONAR_TOKEN != ''
