@@ -34,6 +34,21 @@ curl -X POST https://stem.example.com/api/v1/operator/orgs \
   -d '{ "app": "my-app", "name": "Example Team", "slug": "example", "owner_email": "owner@example.com" }'
 ```
 
+### Stem-wide teams and primary teams
+
+A person can be in any number of teams and picks one as their primary team on the account page. A stem-wide team belongs to no app: create it with `"stem_wide": true` instead of `app`. Every app except sealed apps sees it in the `orgs` claim and can read it (`GET /api/v1/orgs`, `GET /api/v1/orgs/:id`), but no app can change it or list its members. The operator manages its members:
+
+```sh
+curl -X POST https://stem.example.com/api/v1/operator/orgs \
+  -H "authorization: Bearer $OPERATOR_TOKEN" -H "content-type: application/json" \
+  -d '{ "stem_wide": true, "name": "Example Studio", "slug": "example-studio", "owner_email": "owner@example.com", "owner_primary": true }'
+
+# Add someone to any team, or change their role; "primary": true also makes it their primary team.
+curl -X PUT https://stem.example.com/api/v1/operator/orgs/$ORG_ID/members \
+  -H "authorization: Bearer $OPERATOR_TOKEN" -H "content-type: application/json" \
+  -d '{ "email": "someone@example.com", "role": "member", "primary": true }'
+```
+
 ## 2. Sign people in
 
 Discovery: `https://stem.example.com/.well-known/openid-configuration`
@@ -59,12 +74,13 @@ Access tokens are EdDSA (Ed25519) JWTs with `typ: at+jwt`, valid for 10 minutes.
 | `scope` | Granted scopes, space separated. |
 | `email`, `email_verified` | With the `email` scope. Signing in with a code always verifies the address. |
 | `name` | With the `profile` scope. |
-| `orgs` | With the `orgs` scope: `{ "<organization id>": "<role>" }` for every organization of your app the user belongs to. Empty object when they belong to none. |
+| `orgs` | With the `orgs` scope: `{ "<organization id>": "<role>" }` for every organization of your app the user belongs to, plus stem-wide teams (not for sealed apps). The primary team comes first. Empty object when they belong to none. |
+| `primary_org` | With the `orgs` scope, when the person has a primary team and it is in `orgs`: its id. Also in the ID token. |
 | `auth_method` | How the person signed in to stem for this session: `passkey`, `email_code`, or `unknown` (sessions from before stem recorded it, or a session that has ended). Also in the ID token. See [Sign-in strength and step-up](#sign-in-strength-and-step-up). |
 | `passkey_synced` | Only with `auth_method: passkey`. `true` for a passkey that syncs between devices (iCloud Keychain, Google Password Manager, most password managers), `false` for one bound to a single device or security key. |
 | `signed_in_at` | When that sign-in happened, in seconds since the epoch. The same moment as the ID token's `auth_time`, which access tokens can't carry. |
 
-There is no "active organization" in the token. The app decides which organization a request is about (for example from the URL) and checks `orgs[thatId]`. Role changes show up at the next refresh, so within 10 minutes.
+There is no "active organization" in the token. The app decides which organization a request is about (for example from the URL) and checks `orgs[thatId]`. `primary_org` is a good default when nothing else says which team to open. Role changes show up at the next refresh, so within 10 minutes.
 
 Roles: `owner`, `admin`, `member`, plus any roles in stem's `ORG_ROLES` (for example `dispatcher,pilot`). What a role allows inside the app is up to the app.
 
@@ -110,8 +126,8 @@ The token lasts 5 minutes. Send it as `Authorization: Bearer …` to:
 | Method and path | What it does |
 | --- | --- |
 | `GET /api/v1/roles` | Role names this stem accepts. |
-| `GET /api/v1/orgs` | Your app's organizations. |
-| `GET /api/v1/orgs/:id` | One organization. |
+| `GET /api/v1/orgs` | Your app's organizations, then the stem-wide teams (`stem_wide: true`, read-only; none for sealed apps). |
+| `GET /api/v1/orgs/:id` | One organization, yours or stem-wide. |
 | `PATCH /api/v1/orgs/:id` | Change `name`, `logo` (https URL) or `metadata` (object). |
 | `GET /api/v1/orgs/:id/members?limit=100&offset=0` | Members with `user_id`, `role`, `user { id, email, name }`, plus `total`. |
 | `POST /api/v1/orgs/:id/members` | Add `{ user_id \| email, role }` directly. Unknown emails get an account that is confirmed at first sign-in. |
@@ -178,5 +194,5 @@ An app can give signed-in people more (free conversions, uploads, requests) with
 
 - `sub` is the same for a person across all apps on one stem, except sealed apps, which get their own (see [sealed-apps.md](sealed-apps.md)). Don't treat it as a secret.
 - The directory API can add any existing stem account to one of your organizations by email or user id, without an invitation. That's meant for first-party apps registered by the operator; use invitations when the person should agree first.
-- People can't change organizations on stem itself. Renaming, metadata, members and deletion all go through your app and the directory API.
+- People can't change organizations on stem itself, only pick their primary team. Renaming, metadata, members and deletion all go through your app and the directory API.
 - Per-IP limits treat every IPv6 address on its own.

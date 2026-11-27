@@ -26,7 +26,7 @@ export function landingPage(ui: Ui) {
 <section class="split" style="padding-top:48px">
   <div class="panel"><h2>What apps get</h2><ul class="seedlist" style="margin-top:14px">
     <li>Your name and email address, once you say yes.</li>
-    <li>Which teams you're in for that app, and your role in each.</li>
+    <li>Which teams you're in for that app or across stem, your role in each, and your primary team.</li>
     <li>Nothing else. No password, no browsing history, no tracking.</li>
   </ul></div>
   <div class="panel"><h2>How you sign in</h2><ul class="seedlist" style="margin-top:14px">
@@ -125,6 +125,7 @@ export function accountPage(ui: Ui) {
   <div>
     <section class="panel">
       <h2>Teams</h2>
+      <p class="small">Your primary team is the one apps open first.</p>
       <ul class="rows" id="orgs" style="margin-top:8px"></ul>
     </section>
     <section class="panel sect">
@@ -160,7 +161,7 @@ export function consentPage(ui: Ui, client: { name: string; uri: string | null }
     profile: "See your name",
     email: "See your email address",
     offline_access: "Keep you signed in until you sign out",
-    orgs: "See which of its teams you're in, and your role",
+    orgs: "See which of its teams and stem-wide teams you're in, your role, and your primary team",
   };
   const items = scopes.filter((s) => SCOPE_TEXT[s]).map((s) => `<li>${esc(SCOPE_TEXT[s])}</li>`).join("");
   return page(

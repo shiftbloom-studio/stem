@@ -10,6 +10,7 @@ type Db = {
   findOne<T>(q: { model: string; where: { field: string; value: unknown; operator?: "in" | "lt" | "gt" }[] }): Promise<T | null>;
   findMany<T>(q: { model: string; where?: { field: string; value: unknown; operator?: "in" | "lt" | "gt" }[]; limit?: number }): Promise<T[]>;
   updateMany(q: { model: string; where: { field: string; value: unknown }[]; update: Record<string, unknown> }): Promise<unknown>;
+  update<T>(q: { model: string; where: { field: string; value: unknown }[]; update: Record<string, unknown> }): Promise<T | null>;
   deleteMany(q: { model: string; where: { field: string; value: unknown }[] }): Promise<unknown>;
 };
 
@@ -60,13 +61,42 @@ export async function removeApp(db: Db, userId: string, clientId: string) {
   await db.deleteMany({ model: "oauthConsent", where });
 }
 
+type Membership = { id: string; organizationId: string; role: string; isPrimary?: boolean | number | null; createdAt: Date };
+type TeamOrg = { id: string; name: string; slug: string; app?: string | null };
+
+/** The person's teams with their role, which one is primary, and whether it's stem-wide (no app). Primary first, then by name. */
+export async function listTeams(db: Db, userId: string) {
+  const members = await db.findMany<Membership>({ model: "member", where: [{ field: "userId", value: userId }], limit: 500 });
+  const orgs = new Map<string, TeamOrg>();
+  for (const part of chunks(members.map((m) => m.organizationId), 90)) {
+    for (const o of await db.findMany<TeamOrg>({ model: "organization", where: [{ field: "id", operator: "in", value: part }], limit: part.length })) orgs.set(o.id, o);
+  }
+  return members
+    .filter((m) => orgs.has(m.organizationId))
+    .map((m) => { const o = orgs.get(m.organizationId)!; return { id: o.id, name: o.name, slug: o.slug, app: o.app || null, stem_wide: !o.app, role: m.role, primary: !!m.isPrimary, joined_at: iso(m.createdAt) }; })
+    .sort((a, b) => Number(b.primary) - Number(a.primary) || a.name.localeCompare(b.name));
+}
+
+/** Makes one of the person's teams their primary one, or clears it (null). False when they aren't in that team. */
+export async function setPrimaryTeam(db: Db, userId: string, organizationId: string | null): Promise<boolean> {
+  let target: Membership | null = null;
+  if (organizationId) {
+    target = await db.findOne<Membership>({ model: "member", where: [{ field: "userId", value: userId }, { field: "organizationId", value: organizationId }] });
+    if (!target) return false;
+  }
+  // Clear first: the unique index allows one primary membership per person.
+  await db.updateMany({ model: "member", where: [{ field: "userId", value: userId }, { field: "isPrimary", value: true }], update: { isPrimary: false } });
+  if (target) await db.update({ model: "member", where: [{ field: "id", value: target.id }], update: { isPrimary: true } });
+  return true;
+}
+
 /** Everything stem stores about one person, without secrets (no tokens, no key material, no code hashes). */
 export async function exportData(db: Db, user: { id: string; email: string }) {
   const u = await db.findOne<Record<string, unknown>>({ model: "user", where: [{ field: "id", value: user.id }] });
   const [sessions, passkeys, members, invitations, accounts, apps, limit] = await Promise.all([
     db.findMany<Record<string, unknown>>({ model: "session", where: [{ field: "userId", value: user.id }], limit: 500 }),
     db.findMany<Record<string, unknown>>({ model: "passkey", where: [{ field: "userId", value: user.id }], limit: 100 }),
-    db.findMany<{ organizationId: string; role: string; createdAt: Date }>({ model: "member", where: [{ field: "userId", value: user.id }], limit: 500 }),
+    db.findMany<{ organizationId: string; role: string; isPrimary?: boolean | number | null; createdAt: Date }>({ model: "member", where: [{ field: "userId", value: user.id }], limit: 500 }),
     db.findMany<Record<string, unknown>>({ model: "invitation", where: [{ field: "email", value: user.email.toLowerCase() }], limit: 500 }),
     db.findMany<Record<string, unknown>>({ model: "account", where: [{ field: "userId", value: user.id }], limit: 50 }),
     connectedApps(db, user.id),
@@ -84,7 +114,7 @@ export async function exportData(db: Db, user: { id: string; email: string }) {
     sign_in_methods: accounts.map((a) => ({ provider: a.providerId, created_at: iso(a.createdAt) })),
     passkeys: passkeys.map((p) => ({ id: p.id, name: p.name || null, device_type: p.deviceType, synced: !!p.backedUp, authenticator_aaguid: p.aaguid || null, transports: p.transports || null, created_at: iso(p.createdAt) })),
     sessions: sessions.map((s) => ({ created_at: iso(s.createdAt), updated_at: iso(s.updatedAt), expires_at: iso(s.expiresAt), ip_address: s.ipAddress || null, user_agent: s.userAgent || null, sign_in_method: s.authMethod || null })),
-    teams: members.map((m) => ({ organization: org(m.organizationId), role: m.role, joined_at: iso(m.createdAt) })),
+    teams: members.map((m) => ({ organization: org(m.organizationId), role: m.role, primary: !!m.isPrimary, joined_at: iso(m.createdAt) })),
     invitations: invitations.map((i) => ({ organization: org(i.organizationId), role: i.role || null, status: i.status, created_at: iso(i.createdAt), expires_at: iso(i.expiresAt) })),
     apps,
     code_limits: limit ? { window_start: iso(limit.windowStart), codes_sent: limit.sends, attempts: limit.verifies, last_code_at: iso(limit.lastSend) } : null,
@@ -113,6 +143,16 @@ export const accountTools = () =>
             .filter((s) => new Date(s.expiresAt).getTime() > now)
             .map((s) => ({ id: s.id, token: s.token, userAgent: s.userAgent || null, ipAddress: s.ipAddress || null, createdAt: s.createdAt, updatedAt: s.updatedAt, expiresAt: s.expiresAt })),
         );
+      }),
+      listOwnTeams: createAuthEndpoint("/stem/teams", { method: "GET", use: [sessionMiddleware] }, async (ctx) => {
+        ctx.setHeader("cache-control", "no-store");
+        return ctx.json(await listTeams(ctx.context.adapter as unknown as Db, ctx.context.session.user.id));
+      }),
+      setPrimaryTeam: createAuthEndpoint("/stem/teams/primary", { method: "POST", use: [sessionMiddleware] }, async (ctx) => {
+        const raw = (ctx.body as { organization_id?: unknown } | undefined)?.organization_id;
+        if (raw !== null && (typeof raw !== "string" || !raw || raw.length > 200)) throw new APIError("BAD_REQUEST", { message: "organization_id must be a team id or null" });
+        if (!(await setPrimaryTeam(ctx.context.adapter as unknown as Db, ctx.context.session.user.id, raw))) throw new APIError("NOT_FOUND", { message: "You aren't in that team." });
+        return ctx.json({ success: true });
       }),
       listConnectedApps: createAuthEndpoint("/stem/apps", { method: "GET", use: [sessionMiddleware] }, async (ctx) => {
         ctx.setHeader("cache-control", "no-store");

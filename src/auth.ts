@@ -11,7 +11,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import type { Env } from "./env";
 import { accessControl } from "./roles";
 import { sendMail, codeMail, inviteMail } from "./email";
-import { orgClaims, type ClaimsAdapter } from "./claims";
+import { teamClaims, type ClaimsAdapter } from "./claims";
 import { timingSafeEqual } from "./util";
 import { authStrength, strengthClaims } from "./strength";
 import { mandates } from "./mandates/plugin";
@@ -77,6 +77,9 @@ export const USER_ORG_PATHS = new Set([
   "/organization/accept-invitation",
   "/organization/reject-invitation",
 ]);
+
+/** `orgs`, plus `primary_org` when the person's primary team is one the app sees. */
+const teamsClaim = (t: { orgs: Record<string, string>; primary: string | null }) => (t.primary ? { orgs: t.orgs, primary_org: t.primary } : { orgs: t.orgs });
 
 export function createAuth(env: Env, exec?: Exec) {
   const url = new URL(env.STEM_URL);
@@ -195,7 +198,10 @@ export function createAuth(env: Env, exec?: Exec) {
         cancelPendingInvitationsOnReInvite: true,
         requireEmailVerificationOnInvitation: true,
         schema: {
+          // No app means a stem-wide team (src/claims.ts): every app but sealed ones sees it.
           organization: { additionalFields: { app: { type: "string", required: false, input: false } } },
+          // The person's primary team; at most one per person (unique index in migration 0005).
+          member: { additionalFields: { isPrimary: { type: "boolean", required: false, input: false } } },
           invitation: { additionalFields: { redirectTo: { type: "string", required: false, input: false } } },
         },
         async sendInvitationEmail({ id, email, organization: org, inviter }) {
@@ -247,13 +253,13 @@ export function createAuth(env: Env, exec?: Exec) {
           if (scopes.includes("email") && !sealed) Object.assign(claims, { email: user.email, email_verified: user.emailVerified });
           if (scopes.includes("profile") && user.name) claims.name = user.name;
           const app = typeof metadata?.app === "string" ? metadata.app : null;
-          if (app && scopes.includes("orgs")) claims.orgs = await orgClaims(await adapter(), user.id, app);
+          if (app && scopes.includes("orgs")) Object.assign(claims, teamsClaim(await teamClaims(await adapter(), user.id, app, !sealed)));
           return claims;
         },
         async customIdTokenClaims({ user, scopes, metadata }) {
           const app = typeof metadata?.app === "string" ? metadata.app : null;
           if (!app || !scopes.includes("orgs")) return {};
-          return { orgs: await orgClaims(await adapter(), user.id, app) };
+          return teamsClaim(await teamClaims(await adapter(), user.id, app, !isSealedApp(env, app)));
         },
       }),
     ],
