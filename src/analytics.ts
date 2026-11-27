@@ -54,7 +54,7 @@ export function signInEvent(ctx: Ctx, now = Date.now()): [string, Props] | null 
   const method = SIGN_IN_METHODS[ctx.path];
   const user = ctx.context.newSession?.user;
   if (!method || !user) return null;
-  const created = user.createdAt ? new Date(user.createdAt).getTime() : NaN;
+  const created = user.createdAt ? new Date(user.createdAt).getTime() : Number.NaN;
   return ["signed_in", { method, first_sign_in: Number.isFinite(created) && now - created < FIRST_SIGN_IN_MS }];
 }
 
@@ -71,7 +71,7 @@ export const usageEvents = (env: Env, exec: Exec) =>
               const c = ctx as unknown as Ctx;
               if (failed(c.context.returned)) return;
               const ev = Object.hasOwn(SIGN_IN_METHODS, c.path) ? signInEvent(c) : EVENTS[c.path](c);
-              if (ev) phCapture(env, exec, ev[0], ev[1]);
+              if (ev) void phCapture(env, exec, ev[0], ev[1]);
             } catch (e) {
               console.error("[stem] usage event failed", e);
             }

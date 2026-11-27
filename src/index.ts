@@ -245,7 +245,7 @@ const routeOf = (p: string) => p.replace(/\/[0-9a-f-]{36}(?=\/|$)/gi, "/:id").re
 app.notFound((c) => html(messagePage(ui(c.env), "Not here", "This page doesn't exist. Maybe the link is old or has a typo."), 404));
 app.onError((e, c) => {
   console.error("[stem] unhandled", e);
-  phException(c.env, c.executionCtx as never, e, { path: routeOf(c.req.path) });
+  void phException(c.env, c.executionCtx as never, e, { path: routeOf(c.req.path) });
   return c.req.path.startsWith("/api/") ? c.json({ error: "server_error" }, 500) : html(messagePage(ui(c.env), "Something broke", "That's on us. Try again in a moment.", "error"), 500);
 });
 

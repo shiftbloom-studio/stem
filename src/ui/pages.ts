@@ -197,7 +197,7 @@ export function invitePage(ui: Ui, inv: { id: string; orgName: string; email: st
   <div>
     <span class="label">invitation</span>
     <h1 style="margin-top:14px">Join ${esc(inv.orgName)}<em>.</em></h1>
-    <p class="lead">${inv.inviter ? `${esc(inv.inviter)} invited` : "You've been invited with"} <strong>${esc(inv.email)}</strong>${inv.inviter ? "" : ""}.</p>
+    <p class="lead">${inv.inviter ? `${esc(inv.inviter)} invited` : "You've been invited with"} <strong>${esc(inv.email)}</strong>.</p>
   </div>
   <div class="panel stack">
     <p style="margin:0" id="invite-hint">Sign in with that address to accept. If you don't have an account yet, signing in creates one.</p>

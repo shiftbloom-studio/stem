@@ -31,8 +31,8 @@ if (example) {
   Object.assign(env, process.env);
   if (existsSync(".env.deploy")) {
     for (const line of readFileSync(".env.deploy", "utf8").split("\n")) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
-      if (m && !(m[1] in process.env)) env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+      const m = /^\s*([A-Z0-9_]+)\s*=(.*)$/s.exec(line);
+      if (m && !(m[1] in process.env)) env[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
     }
   }
 }
@@ -53,7 +53,7 @@ const json = (v) => JSON.stringify(v ?? "").slice(1, -1);
 let config = readFileSync("wrangler.jsonc", "utf8");
 for (const k of Object.keys(REQUIRED)) config = config.replaceAll(`<${k}>`, json(env[k]));
 config = config.replace(/<([A-Z0-9_]+)\?>/g, (_m, k) => json(env[k]));
-const left = config.replace(/^\s*\/\/.*$/gm, "").match(/<[A-Z0-9_]+\??>/);
+const left = config.replace(/^[ \t]*\/\/.*$/gm, "").match(/<[A-Z0-9_]+\??>/);
 if (left) {
   console.error(`Unfilled placeholder ${left[0]} in wrangler.jsonc`);
   process.exit(1);

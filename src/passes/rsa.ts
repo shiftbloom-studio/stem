@@ -5,7 +5,7 @@
 export const b64u = (b: Uint8Array) => {
   let s = "";
   for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
-  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/={1,2}$/, "");
 };
 export const unb64u = (s: string) => {
   if (!/^[A-Za-z0-9_-]*$/.test(s)) throw new Error("not base64url");
@@ -21,7 +21,7 @@ export const intToBytes = (n: bigint, len: number) => {
   const hex = n.toString(16).padStart(len * 2, "0");
   if (hex.length > len * 2) throw new Error("integer too large");
   const out = new Uint8Array(len);
-  for (let i = 0; i < len; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  for (let i = 0; i < len; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
 };
 export function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
