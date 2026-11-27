@@ -7,7 +7,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
-  "observability": { "enabled": true },
+  "observability": { "enabled": true, "issues": { "enabled": true } },
 
   // Serve on your own (sub)domain. The zone must be on the same Cloudflare account.
   "routes": [{ "pattern": "<STEM_HOSTNAME>", "custom_domain": true }],
